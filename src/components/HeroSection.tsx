@@ -44,18 +44,13 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
           </div>
 
-          {/* Right Column: Hero Photo (Sized neatly alongside text block) */}
+          {/* Right Column: Hero Photo (Neatly sized alongside text block) */}
           <div className="w-full sm:w-auto shrink-0 flex justify-center lg:justify-end items-center">
-            <div className="relative rounded-2xl overflow-hidden shadow-sm border border-[#EBE3D5] bg-[#F3EFE6] w-full max-w-[320px] sm:max-w-[360px] lg:w-[330px] lg:h-[330px] xl:w-[360px] xl:h-[360px] aspect-square">
+            <div className="relative rounded-2xl overflow-hidden shadow-sm border border-[#EBE3D5] bg-[#F3EFE6] w-full max-w-[340px] sm:max-w-[380px] lg:w-[360px] lg:h-[360px] xl:w-[400px] xl:h-[400px] aspect-square">
               <img
                 src="/square-hero-front-door.jpg"
                 alt="Crate & Key heavy duty plastic totes delivered at front door"
                 className="w-full h-full object-cover transition-transform duration-500 hover:scale-[1.02]"
-                referrerPolicy="no-referrer"
-                onError={(e) => {
-                  // Fallback to hero-front-door.jpg if needed
-                  (e.target as HTMLImageElement).src = "/hero-front-door.jpg";
-                }}
               />
             </div>
           </div>
