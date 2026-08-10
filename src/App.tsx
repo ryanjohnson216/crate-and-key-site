@@ -128,94 +128,97 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#FDFBF7] text-[#3E362E] font-sans antialiased selection:bg-[#E5DCCF] selection:text-[#3E362E]">
       
-      {currentView === "terms" ? (
-        <>
-          <TermsAndConditionsPage
-            theme={theme}
-            onNavigateHome={() => handleNavigate("home")}
-            onOpenCheckout={() => setIsCheckoutOpen(true)}
-          />
+      {/* Wrapper for main page content, hidden during printing */}
+      <div className="main-page-wrapper">
+        {currentView === "terms" ? (
+          <>
+            <TermsAndConditionsPage
+              theme={theme}
+              onNavigateHome={() => handleNavigate("home")}
+              onOpenCheckout={() => setIsCheckoutOpen(true)}
+            />
 
-          {/* Footer */}
-          <FooterSection
-            theme={theme}
-            onOpenCheckout={() => setIsCheckoutOpen(true)}
-            onOpenQuiz={() => setIsQuizOpen(true)}
-            onNavigateToTerms={() => handleNavigate("terms")}
-          />
-        </>
-      ) : (
-        <>
-          {/* Top Navigation */}
-          <Navbar
-            theme={theme}
-            setTheme={setTheme}
-            cart={cart}
-            onOpenCheckout={() => setIsCheckoutOpen(true)}
-            onOpenQuiz={() => setIsQuizOpen(true)}
-            onNavigateHome={() => handleNavigate("home")}
-          />
-
-          {/* Main Page Sections in exact required order */}
-          <main>
-            {/* 1. Hero */}
-            <HeroSection
+            {/* Footer */}
+            <FooterSection
               theme={theme}
               onOpenCheckout={() => setIsCheckoutOpen(true)}
               onOpenQuiz={() => setIsQuizOpen(true)}
+              onNavigateToTerms={() => handleNavigate("terms")}
             />
-
-            {/* 2. Why Reusable Totes */}
-            <WhyReusableSection theme={theme} />
-
-            {/* 3. How It Works */}
-            <HowItWorksSection
+          </>
+        ) : (
+          <>
+            {/* Top Navigation */}
+            <Navbar
               theme={theme}
-              onOpenCheckout={() => setIsCheckoutOpen(true)}
-            />
-
-            {/* 4. Product Catalog (Packages, Custom, Add-ons, Quiz trigger) */}
-            <ProductCatalogSection
-              theme={theme}
+              setTheme={setTheme}
               cart={cart}
-              onAddToCart={handleAddToCart}
-              onOpenQuiz={() => setIsQuizOpen(true)}
               onOpenCheckout={() => setIsCheckoutOpen(true)}
-            />
-
-            {/* 5. FAQ */}
-            <FaqSection
-              theme={theme}
               onOpenQuiz={() => setIsQuizOpen(true)}
+              onNavigateHome={() => handleNavigate("home")}
             />
-          </main>
 
-          {/* Footer */}
-          <FooterSection
-            theme={theme}
-            onOpenCheckout={() => setIsCheckoutOpen(true)}
-            onOpenQuiz={() => setIsQuizOpen(true)}
-            onNavigateToTerms={() => handleNavigate("terms")}
-          />
-        </>
-      )}
+            {/* Main Page Sections in exact required order */}
+            <main>
+              {/* 1. Hero */}
+              <HeroSection
+                theme={theme}
+                onOpenCheckout={() => setIsCheckoutOpen(true)}
+                onOpenQuiz={() => setIsQuizOpen(true)}
+              />
 
-      {/* Sticky Bottom Quick Reservation Bar for Mobile & Quick Checkout Access */}
-      <div className="fixed bottom-4 left-4 right-4 z-30 md:hidden">
-        <button
-          type="button"
-          onClick={() => setIsCheckoutOpen(true)}
-          className="w-full py-3.5 px-5 rounded-2xl shadow-xl font-bold text-sm text-white flex items-center justify-between transition-transform active:scale-98 bg-[#5A6B5D]"
-        >
-          <div className="flex items-center gap-2">
-            <ShoppingBag className="w-5 h-5 text-amber-100" />
-            <span>Reserve Totes ({cart.length} item{cart.length === 1 ? "" : "s"})</span>
-          </div>
-          <div className="flex items-center gap-1.5 font-extrabold text-white">
-            <span>${cartTotal}</span>
-            <ArrowRight className="w-4 h-4" />
-          </div>
-        </button>
+              {/* 2. Why Reusable Totes */}
+              <WhyReusableSection theme={theme} />
+
+              {/* 3. How It Works */}
+              <HowItWorksSection
+                theme={theme}
+                onOpenCheckout={() => setIsCheckoutOpen(true)}
+              />
+
+              {/* 4. Product Catalog (Packages, Custom, Add-ons, Quiz trigger) */}
+              <ProductCatalogSection
+                theme={theme}
+                cart={cart}
+                onAddToCart={handleAddToCart}
+                onOpenQuiz={() => setIsQuizOpen(true)}
+                onOpenCheckout={() => setIsCheckoutOpen(true)}
+              />
+
+              {/* 5. FAQ */}
+              <FaqSection
+                theme={theme}
+                onOpenQuiz={() => setIsQuizOpen(true)}
+              />
+            </main>
+
+            {/* Footer */}
+            <FooterSection
+              theme={theme}
+              onOpenCheckout={() => setIsCheckoutOpen(true)}
+              onOpenQuiz={() => setIsQuizOpen(true)}
+              onNavigateToTerms={() => handleNavigate("terms")}
+            />
+          </>
+        )}
+
+        {/* Sticky Bottom Quick Reservation Bar for Mobile & Quick Checkout Access */}
+        <div className="fixed bottom-4 left-4 right-4 z-30 md:hidden">
+          <button
+            type="button"
+            onClick={() => setIsCheckoutOpen(true)}
+            className="w-full py-3.5 px-5 rounded-2xl shadow-xl font-bold text-sm text-white flex items-center justify-between transition-transform active:scale-98 bg-[#5A6B5D]"
+          >
+            <div className="flex items-center gap-2">
+              <ShoppingBag className="w-5 h-5 text-amber-100" />
+              <span>Reserve Totes ({cart.length} item{cart.length === 1 ? "" : "s"})</span>
+            </div>
+            <div className="flex items-center gap-1.5 font-extrabold text-white">
+              <span>${cartTotal}</span>
+              <ArrowRight className="w-4 h-4" />
+            </div>
+          </button>
+        </div>
       </div>
 
       {/* Modals */}

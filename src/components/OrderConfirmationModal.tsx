@@ -139,9 +139,17 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
             <span>What happens next?</span>
           </h5>
           <ul className="list-disc list-inside text-[#5E5449] space-y-1 text-[11px] leading-relaxed">
-            <li>A summary of your reservation request was emailed to <strong>{reservation.email}</strong>.</li>
+            <li>A summary of your reservation request was recorded for <strong>{reservation.email}</strong>.</li>
             <li>Our team will check tote inventory for <strong>{reservation.deliveryDate}</strong> and email your confirmation with invoice &amp; payment details.</li>
             <li>No charge or commitment until you review and approve the payment details!</li>
+            <li>
+              Want to send a direct message? <a 
+                href={`mailto:crateandkeyrentals@gmail.com?subject=Reservation Request ${reservation.confirmationCode} - ${encodeURIComponent(reservation.fullName)}&body=${encodeURIComponent(`Hi Crate & Key Team,\n\nI just submitted a tote reservation request (${reservation.confirmationCode}).\n\nDelivery Date: ${reservation.deliveryDate}\nPickup Date: ${reservation.pickupDate}\nAddress: ${reservation.deliveryAddress}, ${reservation.city}, IL ${reservation.zipCode}\nPhone: ${reservation.phone}\n\nItems Reserved:\n${reservation.items.map((i) => `- ${i.name} (x${i.quantity})`).join("\n")}\n\nEstimated Total: $${reservation.total.toFixed(2)}\n\nPlease let me know when inventory is confirmed!\n\nThanks,\n${reservation.fullName}`)}`}
+                className="font-bold text-[#5A6B5D] hover:underline"
+              >
+                Click here to email our team directly
+              </a>.
+            </li>
             <li>Questions? Call or text us anytime at <a href="tel:3098865202" className="font-bold hover:underline">(309) 886-5202</a>.</li>
           </ul>
         </div>

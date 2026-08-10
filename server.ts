@@ -14,19 +14,27 @@ app.use(express.json());
 // Helper to construct Nodemailer transporter based on ENV vars
 function getEmailTransporter() {
   const user = process.env.GMAIL_USER || process.env.SMTP_USER || "crateandkeyrentals@gmail.com";
-  const pass = process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS;
+  const rawPass = process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS || "";
+  const pass = rawPass.replace(/\s+/g, "");
 
   if (!pass) {
     return null;
   }
 
-  const host = process.env.SMTP_HOST || "smtp.gmail.com";
-  const port = parseInt(process.env.SMTP_PORT || "587", 10);
+  // If host is explicitly specified (e.g. non-gmail), use host/port, otherwise standard gmail service
+  if (process.env.SMTP_HOST && process.env.SMTP_HOST !== "smtp.gmail.com") {
+    const host = process.env.SMTP_HOST;
+    const port = parseInt(process.env.SMTP_PORT || "587", 10);
+    return nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: { user, pass },
+    });
+  }
 
   return nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
+    service: "gmail",
     auth: {
       user,
       pass,
