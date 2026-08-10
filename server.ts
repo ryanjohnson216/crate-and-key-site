@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
+import nodemailer from "nodemailer";
 
 dotenv.config();
 
@@ -9,6 +10,112 @@ const app = express();
 const PORT = 3000;
 
 app.use(express.json());
+
+// Helper to construct Nodemailer transporter based on ENV vars
+function getEmailTransporter() {
+  const user = process.env.GMAIL_USER || process.env.SMTP_USER || "crateandkeyrentals@gmail.com";
+  const pass = process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS;
+
+  if (!pass) {
+    return null;
+  }
+
+  const host = process.env.SMTP_HOST || "smtp.gmail.com";
+  const port = parseInt(process.env.SMTP_PORT || "587", 10);
+
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: {
+      user,
+      pass,
+    },
+  });
+}
+
+async function sendReservationEmails(reservation: any) {
+  const custName = reservation.customerInfo?.fullName || reservation.fullName || "Valued Customer";
+  const custEmail = reservation.customerInfo?.email || reservation.email || "";
+  const custPhone = reservation.customerInfo?.phone || reservation.phone || "Not provided";
+  const custAddr = reservation.customerInfo?.address || reservation.deliveryAddress || "Not provided";
+  const custZip = reservation.customerInfo?.zipCode || reservation.zipCode || "";
+  const code = reservation.id || reservation.confirmationCode;
+  const deliveryDate = reservation.deliveryDate || "TBD";
+  const pickupDate = reservation.pickupDate || "TBD";
+  const total = (reservation.totalAmount || reservation.total || 0).toFixed(2);
+  const items = Array.isArray(reservation.items) ? reservation.items : [];
+
+  const itemsHtml = items
+    .map((item: any) => `<li><strong>${item.name || item.title}</strong> x ${item.quantity || 1} — $${((item.pricePerUnit || item.price || 0) * (item.quantity || 1)).toFixed(2)}</li>`)
+    .join("");
+
+  const emailHtml = `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #2D2A26; background: #FDFBF7; padding: 24px; border-radius: 12px; border: 1px solid #EBE3D5;">
+      <h2 style="color: #5A6B5D; margin-top: 0;">New Reservation Request — ${code}</h2>
+      <p>A new tote rental reservation request has been received on <strong>Crate & Key</strong>!</p>
+      
+      <div style="background: #F5F2ED; padding: 16px; border-radius: 8px; margin: 16px 0;">
+        <h3 style="margin-top: 0; font-size: 14px; text-transform: uppercase; color: #7E6E5C;">Customer Details</h3>
+        <p style="margin: 4px 0;"><strong>Name:</strong> ${custName}</p>
+        <p style="margin: 4px 0;"><strong>Email:</strong> <a href="mailto:${custEmail}">${custEmail}</a></p>
+        <p style="margin: 4px 0;"><strong>Phone:</strong> <a href="tel:${custPhone}">${custPhone}</a></p>
+        <p style="margin: 4px 0;"><strong>Delivery Address:</strong> ${custAddr}, ${custZip}</p>
+      </div>
+
+      <div style="background: #F5F2ED; padding: 16px; border-radius: 8px; margin: 16px 0;">
+        <h3 style="margin-top: 0; font-size: 14px; text-transform: uppercase; color: #7E6E5C;">Schedule & Total</h3>
+        <p style="margin: 4px 0;"><strong>Drop-Off Date:</strong> ${deliveryDate}</p>
+        <p style="margin: 4px 0;"><strong>Return Pickup Date:</strong> ${pickupDate}</p>
+        <p style="margin: 4px 0;"><strong>Estimated Total:</strong> <span style="font-size: 18px; color: #5A6B5D; font-weight: bold;">$${total}</span></p>
+      </div>
+
+      <div style="background: #F5F2ED; padding: 16px; border-radius: 8px; margin: 16px 0;">
+        <h3 style="margin-top: 0; font-size: 14px; text-transform: uppercase; color: #7E6E5C;">Reserved Items</h3>
+        <ul>${itemsHtml}</ul>
+      </div>
+
+      <p style="font-size: 12px; color: #A08E79; margin-top: 24px;">Crate & Key • Peoria / Washington, IL • crateandkeyrentals@gmail.com</p>
+    </div>
+  `;
+
+  const transporter = getEmailTransporter();
+  const recipientTeam = ["crateandkeyrentals@gmail.com", "hello@crateandkey.com"];
+
+  if (!transporter) {
+    console.log(`[Crate & Key Email] Reservation recorded for ${custName} (${code}).`);
+    console.log(`[Crate & Key Email] To send real emails automatically, add GMAIL_APP_PASSWORD (or SMTP_PASS) to environment variables.`);
+    return { sent: false, reason: "GMAIL_APP_PASSWORD or SMTP_PASS not set in environment" };
+  }
+
+  try {
+    const sender = process.env.GMAIL_USER || process.env.SMTP_USER || "crateandkeyrentals@gmail.com";
+    
+    // 1. Send notification email to team
+    await transporter.sendMail({
+      from: `"Crate & Key Rentals" <${sender}>`,
+      to: recipientTeam.join(", "),
+      subject: `[New Reservation] ${code} - ${custName} (${deliveryDate})`,
+      html: emailHtml,
+    });
+
+    // 2. Send customer receipt copy if email is valid
+    if (custEmail) {
+      await transporter.sendMail({
+        from: `"Crate & Key Rentals" <${sender}>`,
+        to: custEmail,
+        subject: `Your Crate & Key Reservation Request (${code})`,
+        html: emailHtml,
+      });
+    }
+
+    console.log(`[Crate & Key Email] Notification emails sent successfully for reservation ${code}!`);
+    return { sent: true };
+  } catch (err: any) {
+    console.error(`[Crate & Key Email Error] Failed to send email:`, err.message);
+    return { sent: false, error: err.message };
+  }
+}
 
 // Known zip codes within 60 miles of Washington, IL (61571) / Peoria region
 // Distances calculated from 61571 (Washington, IL)
@@ -142,8 +249,8 @@ app.post("/api/validate-zip", (req, res) => {
   });
 });
 
-// API: Save Reservation
-app.post("/api/reserve", (req, res) => {
+// API: Save Reservation & Dispatch Email
+app.post("/api/reserve", async (req, res) => {
   try {
     const reservationData = req.body;
     const confirmationCode = "CK-" + Math.floor(100000 + Math.random() * 900000);
@@ -157,10 +264,14 @@ app.post("/api/reserve", (req, res) => {
     reservations.push(newReservation);
     console.log(`[Crate & Key] New reservation created: ${confirmationCode}`);
 
+    // Trigger email dispatch asynchronously
+    const emailResult = await sendReservationEmails(newReservation);
+
     return res.json({
       success: true,
       confirmationCode,
       reservation: newReservation,
+      emailSent: emailResult.sent,
       message: "Your tote rental reservation has been recorded!",
     });
   } catch (error: any) {

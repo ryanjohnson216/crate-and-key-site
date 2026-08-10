@@ -290,7 +290,7 @@ Content-Type: text/html; charset=utf-8
       ${itemsList}
     </ul>
 
-    <p style="margin-top:20px;">Our local team will review tote availability for your dates and email you invoice &amp; payment instructions within 2 hours. No charge is made until you approve the payment link!</p>
+    <p style="margin-top:20px;">Our local team will review tote availability for your dates and email you invoice &amp; payment instructions. No charge is made until you approve the payment link!</p>
 
     <div class="footer">
       <p>Crate & Key • Washington, IL 61571 • hello@crateandkey.com</p>

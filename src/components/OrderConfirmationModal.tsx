@@ -36,14 +36,14 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#2D2A26]/70 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-[#FDFBF7] rounded-2xl max-w-2xl w-full p-6 sm:p-8 border border-[#EBE3D5] shadow-2xl relative space-y-6 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#2D2A26]/70 backdrop-blur-xs animate-in fade-in duration-200 print-container-root">
+      <div className="bg-[#FDFBF7] rounded-2xl max-w-2xl w-full p-6 sm:p-8 border border-[#EBE3D5] shadow-2xl relative space-y-6 max-h-[90vh] overflow-y-auto print-modal-content">
         
         {/* Close Button */}
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 p-2 text-[#A08E79] hover:text-[#2D2A26] rounded-xl hover:bg-[#F5F2ED] transition"
+          className="absolute top-4 right-4 p-2 text-[#A08E79] hover:text-[#2D2A26] rounded-xl hover:bg-[#F5F2ED] transition no-print"
         >
           <X className="w-6 h-6" />
         </button>
@@ -140,21 +140,21 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
           </h5>
           <ul className="list-disc list-inside text-[#5E5449] space-y-1 text-[11px] leading-relaxed">
             <li>A summary of your reservation request was emailed to <strong>{reservation.email}</strong>.</li>
-            <li>Our team will check tote inventory for <strong>{reservation.deliveryDate}</strong> and email your confirmation with invoice &amp; payment details within 2 hours.</li>
+            <li>Our team will check tote inventory for <strong>{reservation.deliveryDate}</strong> and email your confirmation with invoice &amp; payment details.</li>
             <li>No charge or commitment until you review and approve the payment details!</li>
             <li>Questions? Call or text us anytime at <a href="tel:3098865202" className="font-bold hover:underline">(309) 886-5202</a>.</li>
           </ul>
         </div>
 
         {/* Modal Footer Actions */}
-        <div className="flex flex-col sm:flex-row gap-3 pt-2">
+        <div className="flex flex-col sm:flex-row gap-3 pt-2 no-print">
           <button
             type="button"
             onClick={handlePrint}
             className="flex-1 py-3.5 rounded-full bg-[#E5DCCF] hover:bg-[#EBE3D5] text-[#2D2A26] font-bold text-xs transition flex items-center justify-center gap-2 border border-[#EBE3D5]"
           >
             <Download className="w-4 h-4" />
-            <span>Print Order Summary</span>
+            <span>Print Reservation Summary</span>
           </button>
 
           <button

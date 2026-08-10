@@ -74,10 +74,16 @@ export default function App() {
   // Add Item to Cart
   const handleAddToCart = (newItem: CartItem) => {
     setCart((prev) => {
-      // If it's a package, replace existing package or append
-      if (newItem.type === "package" || newItem.type === "custom") {
-        const nonPackages = prev.filter((i) => i.type !== "package" && i.type !== "custom");
-        return [newItem, ...nonPackages];
+      if (newItem.type === "package") {
+        // Replace existing package, keep custom totes & add-ons
+        const otherItems = prev.filter((i) => i.type !== "package");
+        return [newItem, ...otherItems];
+      }
+
+      if (newItem.type === "custom") {
+        // Replace existing custom tote selection, keep package & add-ons
+        const otherItems = prev.filter((i) => i.type !== "custom");
+        return [...otherItems, newItem];
       }
 
       // If add-on, check if exists

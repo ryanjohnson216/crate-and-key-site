@@ -21,7 +21,8 @@ export const ProductCatalogSection: React.FC<ProductCatalogSectionProps> = ({
   const isWarm = theme === "warm-friendly";
 
   // Custom Tote Counter
-  const [customToteCount, setCustomToteCount] = useState<number>(30);
+  const [customToteInput, setCustomToteInput] = useState<string>("30");
+  const effectiveCustomTotes = Math.max(1, parseInt(customToteInput, 10) || 1);
 
   const isItemInCart = (id: string) => cart.some((c) => c.id === id);
 
@@ -55,16 +56,17 @@ export const ProductCatalogSection: React.FC<ProductCatalogSectionProps> = ({
   };
 
   const handleAddCustomTotes = () => {
-    if (customToteCount < 1) return;
-    const price = customToteCount * BASE_TOTE_RATE_2WEEKS;
+    const count = effectiveCustomTotes;
+    if (count < 1) return;
+    const price = count * BASE_TOTE_RATE_2WEEKS;
     onAddToCart({
-      id: `custom-totes-${customToteCount}`,
-      name: `Custom Tote Quantity (${customToteCount} Totes)`,
+      id: "custom-totes",
+      name: `A-La-Carte Totes (${count} Totes)`,
       type: "custom",
       quantity: 1,
       pricePerUnit: price,
-      toteCount: customToteCount,
-      details: `${customToteCount} plastic totes ($${BASE_TOTE_RATE_2WEEKS}/tote for 2 weeks)`,
+      toteCount: count,
+      details: `${count} plastic totes ($${BASE_TOTE_RATE_2WEEKS}/tote for 2 weeks)`,
     });
   };
 
@@ -217,10 +219,10 @@ export const ProductCatalogSection: React.FC<ProductCatalogSectionProps> = ({
 
             <div className="sm:text-right">
               <span className="text-lg sm:text-2xl font-serif text-[#5A6B5D]">
-                ${customToteCount * BASE_TOTE_RATE_2WEEKS}
+                ${effectiveCustomTotes * BASE_TOTE_RATE_2WEEKS}
               </span>
               <span className="text-[10px] sm:text-xs text-[#5E5449] block">
-                ({customToteCount} totes @ $4/ea)
+                ({effectiveCustomTotes} totes @ $4/ea)
               </span>
             </div>
           </div>
@@ -230,20 +232,23 @@ export const ProductCatalogSection: React.FC<ProductCatalogSectionProps> = ({
               <span className="text-[10px] sm:text-xs font-semibold text-[#5E5449]">Totes:</span>
               <button
                 type="button"
-                onClick={() => setCustomToteCount((c) => Math.max(1, c - 1))}
+                onClick={() => setCustomToteInput(String(Math.max(1, effectiveCustomTotes - 1)))}
                 className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-[#F5F2ED] hover:bg-[#E5DCCF] text-[#2D2A26] font-bold text-xs sm:text-sm flex items-center justify-center border border-[#EBE3D5]"
               >
                 -
               </button>
               <input
-                type="number"
-                value={customToteCount}
-                onChange={(e) => setCustomToteCount(Math.max(1, parseInt(e.target.value) || 1))}
-                className="w-12 sm:w-16 text-center py-0.5 sm:py-1 font-bold text-[#2D2A26] border border-[#EBE3D5] rounded-lg text-xs sm:text-sm bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={customToteInput}
+                onChange={(e) => setCustomToteInput(e.target.value)}
+                onBlur={() => setCustomToteInput(String(effectiveCustomTotes))}
+                className="w-14 sm:w-20 text-center py-1 font-bold text-[#2D2A26] border border-[#EBE3D5] rounded-lg text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#5A6B5D]"
               />
               <button
                 type="button"
-                onClick={() => setCustomToteCount((c) => c + 1)}
+                onClick={() => setCustomToteInput(String(effectiveCustomTotes + 1))}
                 className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-[#F5F2ED] hover:bg-[#E5DCCF] text-[#2D2A26] font-bold text-xs sm:text-sm flex items-center justify-center border border-[#EBE3D5]"
               >
                 +
@@ -256,7 +261,7 @@ export const ProductCatalogSection: React.FC<ProductCatalogSectionProps> = ({
               className="px-3.5 py-1.5 sm:px-5 sm:py-2.5 rounded-full bg-[#5A6B5D] hover:bg-[#4A594D] text-white text-[10px] sm:text-xs font-bold transition flex items-center gap-1"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Add {customToteCount} Totes</span>
+              <span>Add {effectiveCustomTotes} Totes</span>
             </button>
           </div>
         </div>
