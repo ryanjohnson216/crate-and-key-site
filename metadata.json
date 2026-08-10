@@ -1,0 +1,6 @@
+{
+  "name": "Crate & Key",
+  "description": "Heavy-duty reusable plastic moving tote rentals delivered and picked up in the Peoria, IL region.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
