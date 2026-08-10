@@ -1,6 +1,7 @@
 import React from "react";
 import { BrandTheme } from "../types";
 import { ArrowRight } from "lucide-react";
+import heroPhoto from "../assets/hero-photo.jpg";
 
 interface HeroSectionProps {
   theme: BrandTheme;
@@ -17,7 +18,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
         <div className="flex flex-col lg:flex-row items-center justify-between gap-6 sm:gap-8 lg:gap-8">
           
           {/* Left Column: Left-aligned Copy & Action CTA */}
-          <div className="flex-1 text-left space-y-4 sm:space-y-5 max-w-2xl">
+          <div className="flex-1 text-left space-y-4 sm:space-y-5">
             
             {/* Headline */}
             <h1 className="text-2xl min-[380px]:text-3xl sm:text-4xl lg:text-5xl font-serif text-[#2D2A26] tracking-tight leading-snug sm:leading-[1.18] text-left">
@@ -26,7 +27,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
             </h1>
 
             {/* Description */}
-            <p className="text-sm sm:text-base lg:text-lg text-[#5E5449] leading-relaxed text-left">
+            <p className="text-sm sm:text-base lg:text-lg text-[#5E5449] leading-relaxed text-left max-w-xl">
               Heavy-duty, reusable moving totes for your move in Central Illinois. Pack, move, and let us handle the rest. No cardboard, no tape, no waste.
             </p>
 
@@ -44,11 +45,11 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
           </div>
 
-          {/* Right Column: Hero Photo (Neatly sized alongside text block) */}
+          {/* Right Column: Hero Photo (Directly imported asset for guaranteed production loading) */}
           <div className="w-full sm:w-auto shrink-0 flex justify-center lg:justify-end items-center">
-            <div className="relative rounded-2xl overflow-hidden shadow-sm border border-[#EBE3D5] bg-[#F3EFE6] w-full max-w-[340px] sm:max-w-[380px] lg:w-[360px] lg:h-[360px] xl:w-[400px] xl:h-[400px] aspect-square">
+            <div className="relative rounded-2xl overflow-hidden shadow-sm border border-[#EBE3D5] bg-[#F3EFE6] w-full max-w-[340px] sm:max-w-[400px] lg:w-[400px] lg:h-[400px] xl:w-[440px] xl:h-[440px] aspect-square">
               <img
-                src="/square-hero-front-door.jpg"
+                src={heroPhoto}
                 alt="Crate & Key heavy duty plastic totes delivered at front door"
                 className="w-full h-full object-cover transition-transform duration-500 hover:scale-[1.02]"
               />
