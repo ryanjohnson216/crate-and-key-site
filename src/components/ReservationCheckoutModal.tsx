@@ -10,6 +10,7 @@ import {
   sendReservationEmailNotification,
 } from "../lib/googleWorkspace";
 import { User } from "firebase/auth";
+import { trackEvent } from "../lib/analytics";
 
 interface ReservationCheckoutModalProps {
   isOpen: boolean;
@@ -88,6 +89,12 @@ export const ReservationCheckoutModal: React.FC<ReservationCheckoutModalProps> =
         setGoogleToken(null);
       }
     );
+
+    // Track GA begin_checkout
+    trackEvent("begin_checkout", {
+      currency: "USD",
+      items_count: cart.length,
+    });
   }, []);
 
   const handleGoogleLogin = async () => {
@@ -132,13 +139,25 @@ export const ReservationCheckoutModal: React.FC<ReservationCheckoutModalProps> =
   // Extension Fee ($20 per extra week for bundles or $1.50/tote/extra week)
   const extensionFee = extraWeeks * Math.max(20, totalTotesInCart * EXTRA_WEEK_RATE_PER_TOTE);
 
-  const tax = 0;
-  const grandTotal = Math.round((cartSubtotal + extensionFee + deliveryFee) * 100) / 100;
+  const storedCampaign = typeof window !== "undefined" ? sessionStorage.getItem("crate_key_campaign") : null;
+  const isPostcard = (storedCampaign && storedCampaign.toLowerCase().includes("postcard")) || false;
 
-  // Validate Zip against distance-based pricing tiers
+  const tax = 0;
+  // Delivery fee is either 0 (FREE) or confirmed upon contact. Exact charge is removed.
+  const grandTotal = Math.round((cartSubtotal + extensionFee) * 100) / 100;
+
+  // Validate Zip
   const handleZipValidation = async (z: string) => {
     setZipCode(z);
     if (z.length === 5) {
+      if (isPostcard) {
+        setIsZipValid(true);
+        setIsFreeDelivery(true);
+        setDeliveryFee(0);
+        setZipMessage("Postcard Special Active: FREE delivery & pickup included on your tote reservation!");
+        return;
+      }
+
       try {
         const res = await fetch("/api/validate-zip", {
           method: "POST",
@@ -148,34 +167,21 @@ export const ReservationCheckoutModal: React.FC<ReservationCheckoutModalProps> =
         const data = await res.json();
         setIsZipValid(data.eligible);
         setIsFreeDelivery(data.isFreeDelivery ?? false);
-        setDeliveryFee(data.deliveryFee ?? 0);
+        setDeliveryFee(0);
         setZipMessage(data.message);
       } catch {
         const freeZips = ["61571", "61611", "61550", "61548", "61533", "61601", "61602", "61603", "61604", "61605", "61606"];
         const isFree = freeZips.includes(z);
-        const tier1 = ["61614", "61615", "61568", "61530", "61554", "61547", "61525"]; // 10-20 mi ($25)
-        const tier2 = ["61523", "61536", "61517", "61559", "61761"]; // 20-30 mi ($35)
-        const tier3 = ["61701", "61704", "62656", "61520"]; // 30-45 mi ($50)
-        const tier4 = ["61401", "61402"]; // 45-60 mi ($75)
-
-        let fee = 0;
-        if (isFree) fee = 0;
-        else if (tier1.includes(z)) fee = 25;
-        else if (tier2.includes(z)) fee = 35;
-        else if (tier3.includes(z)) fee = 50;
-        else if (tier4.includes(z)) fee = 75;
-        else fee = 25;
-
         const ok = z.startsWith("61") || z.startsWith("62");
         setIsZipValid(ok);
         setIsFreeDelivery(isFree);
-        setDeliveryFee(fee);
+        setDeliveryFee(0);
         setZipMessage(
           isFree
-            ? "ZIP eligible for FREE 10-mile delivery & pickup!"
+            ? "ZIP eligible for FREE local 10-mile delivery & pickup!"
             : ok
-            ? `ZIP is eligible ($${fee} delivery & pickup fee).`
-            : "ZIP is outside our standard 60-mile radius."
+            ? "ZIP is in our Central IL service area! Delivery & pickup options will be confirmed when we contact you."
+            : "ZIP appears to be outside our standard Central IL service region."
         );
       }
     } else {
@@ -214,6 +220,9 @@ export const ReservationCheckoutModal: React.FC<ReservationCheckoutModalProps> =
 
     setIsSubmitting(true);
 
+    const storedCampaign = typeof window !== "undefined" ? sessionStorage.getItem("crate_key_campaign") : null;
+    const campaignSource = storedCampaign || "Direct / Organic Search";
+
     const reservation: ReservationDetails = {
       fullName,
       email,
@@ -231,6 +240,7 @@ export const ReservationCheckoutModal: React.FC<ReservationCheckoutModalProps> =
       isFreeDelivery,
       tax,
       total: grandTotal,
+      campaignSource,
     };
 
     try {
@@ -239,11 +249,12 @@ export const ReservationCheckoutModal: React.FC<ReservationCheckoutModalProps> =
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          customerInfo: { fullName, email, phone, address, zipCode },
+          customerInfo: { fullName, email, phone, address, zipCode, campaignSource },
           items: cart,
           deliveryDate,
           pickupDate,
           totalAmount: grandTotal,
+          campaignSource,
           isRequestOnly: true,
         }),
       });
@@ -275,6 +286,26 @@ export const ReservationCheckoutModal: React.FC<ReservationCheckoutModalProps> =
           }
         }
       }
+
+      // Track GA purchase / reservation request event
+      trackEvent("purchase", {
+        transaction_id: reservation.confirmationCode,
+        value: grandTotal,
+        currency: "USD",
+        campaign_source: campaignSource,
+        items: cart.map((item) => ({
+          item_id: item.id,
+          item_name: item.name,
+          quantity: item.quantity,
+          price: item.pricePerUnit,
+        })),
+      });
+
+      trackEvent("reservation_submitted", {
+        confirmation_code: reservation.confirmationCode,
+        value: grandTotal,
+        campaign_source: campaignSource,
+      });
 
       onCompleteOrder(reservation);
     } catch (err) {
@@ -584,19 +615,38 @@ export const ReservationCheckoutModal: React.FC<ReservationCheckoutModalProps> =
                     </div>
                   )}
 
-                  <div className="flex justify-between font-medium">
+                  <div className="flex justify-between items-center font-medium">
                     <span className="text-[#A08E79]">Delivery &amp; Pickup Fee:</span>
-                    {isFreeDelivery ? (
-                      <span className="text-emerald-400 font-bold">FREE</span>
+                    {isFreeDelivery || isPostcard ? (
+                      <span className="text-emerald-400 font-bold flex items-center gap-1.5">
+                        <span>FREE</span>
+                        {isPostcard && (
+                          <span className="text-[10px] bg-emerald-950/80 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-800">
+                            Postcard Special
+                          </span>
+                        )}
+                      </span>
                     ) : (
-                      <span className="text-white font-bold">${deliveryFee.toFixed(2)}</span>
+                      <span className="text-amber-200/90 font-medium italic">
+                        Confirmed upon contact
+                      </span>
                     )}
                   </div>
 
                   <div className="flex justify-between text-base font-serif text-white pt-2 border-t border-[#3E362E]">
-                    <span>Estimated Total:</span>
+                    <span>Estimated Base Quote:</span>
                     <span className="text-[#A08E79] font-bold">${grandTotal.toFixed(2)}</span>
                   </div>
+
+                  {!(isFreeDelivery || isPostcard) ? (
+                    <p className="text-[10px] text-[#A08E79] text-right italic">
+                      * Delivery &amp; pickup charges will be confirmed when our team contacts you
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-emerald-400 text-right font-medium">
+                      ✓ Includes FREE delivery &amp; pickup
+                    </p>
+                  )}
                 </div>
 
                 {/* Final Submit Button */}

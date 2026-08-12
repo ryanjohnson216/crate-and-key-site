@@ -58,6 +58,7 @@ export interface ReservationDetails {
   isFreeDelivery?: boolean;
   tax: number;
   total: number;
+  campaignSource?: string;
 }
 
 export interface ZipValidationResult {

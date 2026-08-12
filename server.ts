@@ -52,6 +52,9 @@ async function sendReservationEmails(reservation: any) {
   const deliveryDate = reservation.deliveryDate || "TBD";
   const pickupDate = reservation.pickupDate || "TBD";
   const total = (reservation.totalAmount || reservation.total || 0).toFixed(2);
+  const campaignSource = reservation.campaignSource || reservation.customerInfo?.campaignSource || "Direct / Organic Search";
+  const isPostcard = campaignSource.toLowerCase().includes("postcard");
+  const isFreeDelivery = reservation.isFreeDelivery || isPostcard;
   const items = Array.isArray(reservation.items) ? reservation.items : [];
 
   const itemsHtml = items
@@ -69,13 +72,23 @@ async function sendReservationEmails(reservation: any) {
         <p style="margin: 4px 0;"><strong>Email:</strong> <a href="mailto:${custEmail}">${custEmail}</a></p>
         <p style="margin: 4px 0;"><strong>Phone:</strong> <a href="tel:${custPhone}">${custPhone}</a></p>
         <p style="margin: 4px 0;"><strong>Delivery Address:</strong> ${custAddr}, ${custZip}</p>
+        <p style="margin: 4px 0;"><strong>Lead / Campaign Source:</strong> <span style="background: #E5DCCF; padding: 2px 8px; border-radius: 4px; font-weight: bold; color: #3E362E;">${campaignSource}</span></p>
       </div>
 
       <div style="background: #F5F2ED; padding: 16px; border-radius: 8px; margin: 16px 0;">
-        <h3 style="margin-top: 0; font-size: 14px; text-transform: uppercase; color: #7E6E5C;">Schedule & Total</h3>
+        <h3 style="margin-top: 0; font-size: 14px; text-transform: uppercase; color: #7E6E5C;">Schedule & Quote</h3>
         <p style="margin: 4px 0;"><strong>Drop-Off Date:</strong> ${deliveryDate}</p>
         <p style="margin: 4px 0;"><strong>Return Pickup Date:</strong> ${pickupDate}</p>
-        <p style="margin: 4px 0;"><strong>Estimated Total:</strong> <span style="font-size: 18px; color: #5A6B5D; font-weight: bold;">$${total}</span></p>
+        <p style="margin: 4px 0;"><strong>Delivery & Pickup Fee:</strong> ${
+          isFreeDelivery
+            ? `<span style="color: #2e7d32; font-weight: bold;">FREE ${isPostcard ? '(Postcard Offer)' : '(Local Zone)'}</span>`
+            : `<span style="color: #7E6E5C; font-style: italic;">Confirmed upon contact</span>`
+        }</p>
+        <p style="margin: 4px 0;"><strong>Estimated Base Quote:</strong> <span style="font-size: 18px; color: #5A6B5D; font-weight: bold;">$${total}</span> ${
+          !isFreeDelivery
+            ? '<br><span style="font-size: 11px; color: #7E6E5C;">*(Delivery & pickup charges will be confirmed when contacting customer)*</span>'
+            : '<br><span style="font-size: 11px; color: #2e7d32; font-weight: bold;">(Includes FREE delivery & pickup)</span>'
+        }</p>
       </div>
 
       <div style="background: #F5F2ED; padding: 16px; border-radius: 8px; margin: 16px 0;">
@@ -163,14 +176,6 @@ const PEORIA_ZIP_DATABASE: Record<string, { city: string; distanceFrom61571: num
 function calculateDeliveryFee(distanceMiles: number): { isFreeDelivery: boolean; deliveryFee: number } {
   if (distanceMiles <= 10) {
     return { isFreeDelivery: true, deliveryFee: 0 };
-  } else if (distanceMiles <= 20) {
-    return { isFreeDelivery: false, deliveryFee: 25 };
-  } else if (distanceMiles <= 30) {
-    return { isFreeDelivery: false, deliveryFee: 35 };
-  } else if (distanceMiles <= 45) {
-    return { isFreeDelivery: false, deliveryFee: 50 };
-  } else if (distanceMiles <= 60) {
-    return { isFreeDelivery: false, deliveryFee: 75 };
   } else {
     return { isFreeDelivery: false, deliveryFee: 0 };
   }
@@ -211,7 +216,7 @@ app.post("/api/validate-zip", (req, res) => {
   // Exact database lookup
   if (PEORIA_ZIP_DATABASE[cleanedZip]) {
     const info = PEORIA_ZIP_DATABASE[cleanedZip];
-    const { isFreeDelivery, deliveryFee } = calculateDeliveryFee(info.distanceFrom61571);
+    const { isFreeDelivery } = calculateDeliveryFee(info.distanceFrom61571);
 
     return res.json({
       valid: true,
@@ -219,10 +224,10 @@ app.post("/api/validate-zip", (req, res) => {
       city: info.city,
       distanceMiles: info.distanceFrom61571,
       isFreeDelivery,
-      deliveryFee,
+      deliveryFee: 0,
       message: isFreeDelivery
-        ? `Great news! ${info.city} (${cleanedZip}) is within 10 miles of 61571! FREE delivery & pickup included.`
-        : `ZIP ${cleanedZip} (${info.city}) is approx ${info.distanceFrom61571} miles from 61571. Delivery & pickup fee: $${deliveryFee}.`,
+        ? `Great news! ${info.city} (${cleanedZip}) is in our local zone — FREE delivery & pickup included.`
+        : `ZIP ${cleanedZip} (${info.city}) is in our Central IL service area! Delivery & pickup options will be confirmed when we review your request.`,
     });
   }
 
@@ -232,15 +237,14 @@ app.post("/api/validate-zip", (req, res) => {
     const isCoreCentralIL = cleanedZip.startsWith("616") || cleanedZip.startsWith("615") || cleanedZip.startsWith("617") || cleanedZip.startsWith("614");
     if (isCoreCentralIL) {
       const estimatedDistance = 25;
-      const { isFreeDelivery, deliveryFee } = calculateDeliveryFee(estimatedDistance);
       return res.json({
         valid: true,
         eligible: true,
         city: "Central IL Region",
         distanceMiles: estimatedDistance,
-        isFreeDelivery,
-        deliveryFee,
-        message: `ZIP ${cleanedZip} is within our 60-mile service region! Pickup & delivery available for a $${deliveryFee} local delivery fee.`,
+        isFreeDelivery: false,
+        deliveryFee: 0,
+        message: `ZIP ${cleanedZip} is in our Central IL service area! Delivery & pickup options will be confirmed when we contact you.`,
       });
     }
   }

@@ -125,9 +125,26 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
               </div>
             ))}
 
-            <div className="pt-2 border-t border-[#EBE3D5] flex justify-between font-bold text-[#2D2A26] text-sm">
-              <span>Estimated Total:</span>
-              <span className="text-[#5A6B5D] font-serif text-base">${reservation.total.toFixed(2)}</span>
+            <div className="pt-2 border-t border-[#EBE3D5] space-y-1.5">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-[#5E5449] font-medium">Delivery &amp; Pickup Fee:</span>
+                {reservation.isFreeDelivery || reservation.campaignSource?.toLowerCase().includes("postcard") ? (
+                  <span className="font-bold text-emerald-700">FREE</span>
+                ) : (
+                  <span className="font-medium text-[#7E6E5C] italic">Confirmed upon contact</span>
+                )}
+              </div>
+
+              <div className="flex justify-between font-bold text-[#2D2A26] text-sm pt-1 border-t border-[#EBE3D5]">
+                <span>Estimated Base Quote:</span>
+                <span className="text-[#5A6B5D] font-serif text-base">${reservation.total.toFixed(2)}</span>
+              </div>
+
+              {!(reservation.isFreeDelivery || reservation.campaignSource?.toLowerCase().includes("postcard")) && (
+                <p className="text-[10px] text-[#7E6E5C] text-right italic pt-0.5">
+                  * Delivery &amp; pickup charges will be confirmed when our team contacts you
+                </p>
+              )}
             </div>
           </div>
         </div>

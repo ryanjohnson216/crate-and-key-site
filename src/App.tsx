@@ -17,10 +17,54 @@ import { ToteQuizModal } from "./components/ToteQuizModal";
 import { ReservationCheckoutModal } from "./components/ReservationCheckoutModal";
 import { OrderConfirmationModal } from "./components/OrderConfirmationModal";
 import { TermsAndConditionsPage } from "./components/TermsAndConditionsPage";
-import { ShoppingBag, ArrowRight } from "lucide-react";
+import { ShoppingBag, ArrowRight, X } from "lucide-react";
+import { initGA, trackPageView, trackEvent } from "./lib/analytics";
 
 export default function App() {
   const [theme, setTheme] = useState<BrandTheme>("warm-friendly");
+
+  // Campaign & Referral Source Detection + GA Initialization
+  const [campaignBanner, setCampaignBanner] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Initialize Google Analytics on load
+    initGA();
+
+    const params = new URLSearchParams(window.location.search);
+    const utmSource = params.get("utm_source");
+    const utmCampaign = params.get("utm_campaign");
+    const ref = params.get("ref");
+    const promo = params.get("promo");
+
+    if (
+      utmSource === "postcard" ||
+      ref === "postcard" ||
+      promo === "postcard" ||
+      utmCampaign?.includes("postcard") ||
+      utmCampaign?.includes("pending")
+    ) {
+      const tag = "Postcard Campaign (Pending Home Sale)";
+      sessionStorage.setItem("crate_key_campaign", tag);
+      setCampaignBanner("📬 Welcome Homeowner! Postcard offer active — FREE local delivery & pickup included on all tote rentals!");
+      
+      // GA Event for postcard QR scan / campaign visit
+      trackEvent("postcard_landing", {
+        campaign_source: "postcard",
+        utm_campaign: utmCampaign || "pending_home_sale",
+      });
+    } else if (utmSource || ref || promo) {
+      const tag = `Campaign: ${utmSource || ref || promo}${utmCampaign ? ` (${utmCampaign})` : ""}`;
+      sessionStorage.setItem("crate_key_campaign", tag);
+      setCampaignBanner(`✨ Welcome! Special offer active for visitors from ${utmSource || ref || promo}`);
+      
+      trackEvent("campaign_landing", {
+        source: utmSource || ref || promo,
+        campaign: utmCampaign,
+      });
+    }
+  }, []);
 
   // View state: 'home' | 'terms'
   const [currentView, setCurrentView] = useState<"home" | "terms">(() => {
@@ -29,6 +73,7 @@ export default function App() {
 
   const handleNavigate = (view: "home" | "terms") => {
     setCurrentView(view);
+    trackPageView(view === "terms" ? "/#terms" : "/", view === "terms" ? "Terms and Conditions" : "Home - Crate & Key");
     if (typeof window !== "undefined") {
       window.location.hash = view === "terms" ? "#terms" : "";
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -73,6 +118,12 @@ export default function App() {
 
   // Add Item to Cart
   const handleAddToCart = (newItem: CartItem) => {
+    trackEvent("add_to_cart", {
+      currency: "USD",
+      value: newItem.pricePerUnit * newItem.quantity,
+      items: [{ item_id: newItem.id, item_name: newItem.name, quantity: newItem.quantity }],
+    });
+
     setCart((prev) => {
       if (newItem.type === "package") {
         // Replace existing package, keep custom totes & add-ons
@@ -130,6 +181,21 @@ export default function App() {
       
       {/* Wrapper for main page content, hidden during printing */}
       <div className="main-page-wrapper">
+        {/* Postcard / Campaign Welcome Banner */}
+        {campaignBanner && (
+          <div className="bg-[#5A6B5D] text-white text-xs sm:text-sm font-semibold py-2 px-4 text-center flex items-center justify-center gap-2 relative no-print shadow-xs border-b border-[#4A594D]">
+            <span>{campaignBanner}</span>
+            <button 
+              type="button"
+              onClick={() => setCampaignBanner(null)}
+              className="ml-2 text-white/80 hover:text-white p-0.5 rounded-full hover:bg-white/20 transition"
+              title="Dismiss"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
         {currentView === "terms" ? (
           <>
             <TermsAndConditionsPage
