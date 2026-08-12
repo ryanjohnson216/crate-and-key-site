@@ -17,6 +17,7 @@ import { ToteQuizModal } from "./components/ToteQuizModal";
 import { ReservationCheckoutModal } from "./components/ReservationCheckoutModal";
 import { OrderConfirmationModal } from "./components/OrderConfirmationModal";
 import { TermsAndConditionsPage } from "./components/TermsAndConditionsPage";
+import { AdminSyncModal } from "./components/AdminSyncModal";
 import { ShoppingBag, ArrowRight, X } from "lucide-react";
 import { initGA, trackPageView, trackEvent } from "./lib/analytics";
 
@@ -114,7 +115,33 @@ export default function App() {
   // Modal Visibility
   const [isQuizOpen, setIsQuizOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [isAdminSyncOpen, setIsAdminSyncOpen] = useState(false);
   const [completedReservation, setCompletedReservation] = useState<ReservationDetails | null>(null);
+
+  // Hidden Owner Portal Triggers (#admin hash, ?admin=true query, or Ctrl+Shift+A)
+  useEffect(() => {
+    const checkAdminTrigger = () => {
+      if (window.location.hash === "#admin" || window.location.search.includes("admin=true")) {
+        setIsAdminSyncOpen(true);
+      }
+    };
+
+    checkAdminTrigger();
+    window.addEventListener("hashchange", checkAdminTrigger);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "A" || e.key === "a")) {
+        e.preventDefault();
+        setIsAdminSyncOpen((prev) => !prev);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("hashchange", checkAdminTrigger);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
 
   // Add Item to Cart
   const handleAddToCart = (newItem: CartItem) => {
@@ -312,6 +339,11 @@ export default function App() {
         reservation={completedReservation}
         onClose={() => setCompletedReservation(null)}
         theme={theme}
+      />
+
+      <AdminSyncModal
+        isOpen={isAdminSyncOpen}
+        onClose={() => setIsAdminSyncOpen(false)}
       />
 
     </div>

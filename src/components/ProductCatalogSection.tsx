@@ -51,7 +51,7 @@ export const ProductCatalogSection: React.FC<ProductCatalogSectionProps> = ({
       quantity: 1,
       pricePerUnit: pkg.basePrice2Weeks,
       toteCount: pkg.toteCount,
-      details: `${pkg.toteCount} heavy-duty totes (2-week rental)`,
+      details: `${pkg.toteCount} Heavy-Duty Totes (${pkg.homeSize} — 2-Week Rental)`,
     });
   };
 

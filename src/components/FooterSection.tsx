@@ -9,6 +9,7 @@ interface FooterSectionProps {
   onOpenCheckout: () => void;
   onOpenQuiz: () => void;
   onNavigateToTerms?: () => void;
+  onOpenAdminSync?: () => void;
 }
 
 export const FooterSection: React.FC<FooterSectionProps> = ({
@@ -16,6 +17,7 @@ export const FooterSection: React.FC<FooterSectionProps> = ({
   onOpenCheckout,
   onOpenQuiz,
   onNavigateToTerms,
+  onOpenAdminSync,
 }) => {
   const isWarm = theme === "warm-friendly";
 
@@ -131,8 +133,10 @@ export const FooterSection: React.FC<FooterSectionProps> = ({
         </div>
 
         {/* Bottom Copyright */}
-        <div className="text-center text-xs text-[#A08E79]">
-          © {new Date().getFullYear()} Crate &amp; Key. All rights reserved. Washington, Illinois.
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-[#A08E79]">
+          <div>
+            © {new Date().getFullYear()} Crate &amp; Key. All rights reserved. Washington, Illinois.
+          </div>
         </div>
 
       </div>

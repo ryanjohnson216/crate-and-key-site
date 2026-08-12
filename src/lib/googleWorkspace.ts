@@ -218,6 +218,68 @@ export const appendReservationToGoogleSheet = async (
   return spreadsheetId;
 };
 
+export const syncAllReservationsToGoogleSheet = async (accessToken: string, passkey: string = "cratekey2026") => {
+  const spreadsheetId = await getOrCreateReservationsSheet(accessToken);
+
+  // Fetch all reservations from server with admin key
+  const res = await fetch(`/api/reservations?key=${encodeURIComponent(passkey)}`);
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || "Failed to fetch reservations from server");
+  }
+  const list = data.reservations || [];
+
+  const rows = list.map((r: any) => {
+    const custInfo = r.customerInfo || {};
+    const itemsSummary = (r.items || [])
+      .map((i: any) => `${i.quantity || 1}x ${i.name || i.title}`)
+      .join(", ");
+
+    return [
+      r.id || r.confirmationCode || "",
+      r.createdAt || new Date().toLocaleString(),
+      custInfo.fullName || r.fullName || "",
+      custInfo.email || r.email || "",
+      custInfo.phone || r.phone || "",
+      custInfo.address || r.deliveryAddress || "",
+      r.city || "Peoria Area",
+      custInfo.zipCode || r.zipCode || "",
+      r.deliveryDate || "",
+      r.pickupDate || "",
+      `$${(r.totalAmount || r.total || 0).toFixed(2)}`,
+      itemsSummary,
+    ];
+  });
+
+  if (rows.length > 0) {
+    // Overwrite values starting from A2
+    const updateRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Reservations!A2:L${rows.length + 5}?valueInputOption=USER_ENTERED`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          values: rows,
+        }),
+      }
+    );
+
+    if (!updateRes.ok) {
+      const errText = await updateRes.text();
+      throw new Error(`Failed to sync rows to Google Sheet: ${errText}`);
+    }
+  }
+
+  return {
+    spreadsheetId,
+    spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${spreadsheetId}`,
+    count: list.length,
+  };
+};
+
 // --- GMAIL HELPER ---
 function utf8ToBase64Url(str: string): string {
   // Convert UTF-8 string to base64url
@@ -242,7 +304,26 @@ export const sendReservationEmailNotification = async (
 
   const code = reservation.id || reservation.confirmationCode || "CK-XXXXXX";
   const itemsList = (reservation.items || [])
-    .map((i: any) => `<li><strong>${i.quantity}x ${i.name}</strong> ($${(i.pricePerUnit * i.quantity).toFixed(2)})</li>`)
+    .map((i: any) => {
+      let name = i.name || i.title || "Tote Rental Package";
+      let details = i.details || "";
+      const id = (i.id || "").toLowerCase();
+      const lowerName = name.toLowerCase();
+
+      if (id === "pkg-studio" || id === "pkg-1" || lowerName.includes("starter") || lowerName.includes("1 bedroom")) {
+        name = "The Starter Pack";
+        if (!details) details = "25 Heavy-Duty Totes (Studio to 1 Bed — 2-Week Rental)";
+      } else if (id === "pkg-2-3bed" || id === "pkg-2" || lowerName.includes("standard") || lowerName.includes("2 - 3 bedroom") || lowerName.includes("2 bedroom")) {
+        name = "The Standard Move";
+        if (!details) details = "45 Heavy-Duty Totes (2 - 3 Bedrooms — 2-Week Rental)";
+      } else if (id === "pkg-4bed-plus" || id === "pkg-3" || lowerName.includes("family") || lowerName.includes("4+ bedroom") || lowerName.includes("3-4 bedroom")) {
+        name = "The Family Bundle";
+        if (!details) details = "70 Heavy-Duty Totes (4+ Bedrooms — 2-Week Rental)";
+      }
+
+      const detailsHtml = details ? `<br/><span style="font-size: 11px; color: #7E6E5C;">${details}</span>` : "";
+      return `<li><strong>${i.quantity || 1}x ${name}</strong> ($${((i.pricePerUnit || i.price || 0) * (i.quantity || 1)).toFixed(2)})${detailsHtml}</li>`;
+    })
     .join("");
 
   const emailContent = `To: ${recipient}

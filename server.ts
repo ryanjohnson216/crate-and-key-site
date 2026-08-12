@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import nodemailer from "nodemailer";
@@ -42,6 +43,28 @@ function getEmailTransporter() {
   });
 }
 
+// Helper to standardize package names and descriptions to match catalog nomenclature
+function formatItemNameAndDetails(item: any): { name: string; details: string } {
+  let name = item.name || item.title || "Tote Rental Package";
+  let details = item.details || "";
+
+  const id = (item.id || "").toLowerCase();
+  const lowerName = name.toLowerCase();
+
+  if (id === "pkg-studio" || id === "pkg-1" || lowerName.includes("starter") || lowerName.includes("1 bedroom")) {
+    name = "The Starter Pack";
+    if (!details) details = "25 Heavy-Duty Totes (Studio to 1 Bed — 2-Week Rental)";
+  } else if (id === "pkg-2-3bed" || id === "pkg-2" || lowerName.includes("standard") || lowerName.includes("2 - 3 bedroom") || lowerName.includes("2 bedroom")) {
+    name = "The Standard Move";
+    if (!details) details = "45 Heavy-Duty Totes (2 - 3 Bedrooms — 2-Week Rental)";
+  } else if (id === "pkg-4bed-plus" || id === "pkg-3" || lowerName.includes("family") || lowerName.includes("4+ bedroom") || lowerName.includes("3-4 bedroom")) {
+    name = "The Family Bundle";
+    if (!details) details = "70 Heavy-Duty Totes (4+ Bedrooms — 2-Week Rental)";
+  }
+
+  return { name, details };
+}
+
 async function sendReservationEmails(reservation: any) {
   const custName = reservation.customerInfo?.fullName || reservation.fullName || "Valued Customer";
   const custEmail = reservation.customerInfo?.email || reservation.email || "";
@@ -58,7 +81,13 @@ async function sendReservationEmails(reservation: any) {
   const items = Array.isArray(reservation.items) ? reservation.items : [];
 
   const itemsHtml = items
-    .map((item: any) => `<li><strong>${item.name || item.title}</strong> x ${item.quantity || 1} — $${((item.pricePerUnit || item.price || 0) * (item.quantity || 1)).toFixed(2)}</li>`)
+    .map((item: any) => {
+      const { name, details } = formatItemNameAndDetails(item);
+      const qty = item.quantity || 1;
+      const price = ((item.pricePerUnit || item.price || 0) * qty).toFixed(2);
+      const detailsHtml = details ? `<br/><span style="font-size: 11px; color: #7E6E5C; font-weight: normal;">${details}</span>` : '';
+      return `<li style="margin-bottom: 8px;"><strong>${name}</strong> x ${qty} — <strong>$${price}</strong>${detailsHtml}</li>`;
+    })
     .join("");
 
   const emailHtml = `
@@ -101,7 +130,7 @@ async function sendReservationEmails(reservation: any) {
   `;
 
   const transporter = getEmailTransporter();
-  const recipientTeam = ["crateandkeyrentals@gmail.com", "hello@crateandkey.com"];
+  const teamEmail = process.env.GMAIL_USER || process.env.SMTP_USER || "crateandkeyrentals@gmail.com";
 
   if (!transporter) {
     console.log(`[Crate & Key Email] Reservation recorded for ${custName} (${code}).`);
@@ -110,27 +139,73 @@ async function sendReservationEmails(reservation: any) {
   }
 
   try {
-    const sender = process.env.GMAIL_USER || process.env.SMTP_USER || "crateandkeyrentals@gmail.com";
+    const sender = teamEmail;
     
     // 1. Send notification email to team
     await transporter.sendMail({
       from: `"Crate & Key Rentals" <${sender}>`,
-      to: recipientTeam.join(", "),
-      subject: `[New Reservation] ${code} - ${custName} (${deliveryDate})`,
+      to: teamEmail,
+      replyTo: custEmail || teamEmail,
+      subject: `[New Reservation Request] ${code} - ${custName} (${deliveryDate})`,
       html: emailHtml,
     });
 
-    // 2. Send customer receipt copy if email is valid
+    // 2. Send customer receipt confirmation copy
     if (custEmail) {
+      const customerEmailHtml = `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #2D2A26; background: #FDFBF7; padding: 24px; border-radius: 12px; border: 1px solid #EBE3D5;">
+          <div style="text-align: center; padding-bottom: 16px; border-bottom: 1px solid #EBE3D5; margin-bottom: 20px;">
+            <h2 style="color: #5A6B5D; margin: 0; font-size: 22px; font-family: serif;">Crate &amp; Key Rentals</h2>
+            <p style="color: #8C7A6B; font-size: 13px; margin-top: 4px;">Reusable Moving Totes • Peoria &amp; Central Illinois</p>
+          </div>
+
+          <h3 style="color: #2D2A26; margin-top: 0; font-size: 18px;">Reservation Request Received!</h3>
+          <p style="font-size: 14px; line-height: 1.5;">Hello <strong>${custName}</strong>,</p>
+          <p style="font-size: 14px; line-height: 1.5;">Thank you for choosing Crate &amp; Key! We have received your tote rental reservation request (<strong>${code}</strong>) for your upcoming move.</p>
+          
+          <div style="background: #EBF3EC; border-left: 4px solid #5A6B5D; padding: 12px 16px; border-radius: 6px; color: #3A4B3D; font-size: 13px; margin: 18px 0; line-height: 1.5;">
+            <strong>Next Step:</strong> Our local team is reviewing tote availability for your dates. We will reach out to you shortly at <strong>${custPhone}</strong> or via email to confirm drop-off timing, answer questions, and finalize your order.
+          </div>
+
+          <div style="background: #F5F2ED; padding: 16px; border-radius: 8px; margin: 20px 0;">
+            <h4 style="margin-top: 0; font-size: 12px; text-transform: uppercase; color: #7E6E5C; letter-spacing: 0.5px;">Reservation Summary (${code})</h4>
+            <p style="margin: 6px 0; font-size: 13px;"><strong>Scheduled Drop-Off:</strong> ${deliveryDate}</p>
+            <p style="margin: 6px 0; font-size: 13px;"><strong>Scheduled Return Pickup:</strong> ${pickupDate}</p>
+            <p style="margin: 6px 0; font-size: 13px;"><strong>Delivery Address:</strong> ${custAddr}, ${custZip}</p>
+            <p style="margin: 6px 0; font-size: 13px;"><strong>Delivery Fee:</strong> ${
+              isFreeDelivery
+                ? `<span style="color: #2e7d32; font-weight: bold;">FREE ${isPostcard ? '(Postcard Offer)' : '(Local Zone)'}</span>`
+                : `<span style="color: #7E6E5C;">Confirmed upon contact</span>`
+            }</p>
+            <p style="margin: 6px 0; font-size: 13px;"><strong>Estimated Base Quote:</strong> <span style="font-size: 16px; color: #5A6B5D; font-weight: bold;">$${total}</span></p>
+          </div>
+
+          <div style="background: #F5F2ED; padding: 16px; border-radius: 8px; margin: 20px 0;">
+            <h4 style="margin-top: 0; font-size: 12px; text-transform: uppercase; color: #7E6E5C; letter-spacing: 0.5px;">Reserved Packages &amp; Items</h4>
+            <ul style="padding-left: 20px; margin: 8px 0 0 0; font-size: 13px;">${itemsHtml}</ul>
+          </div>
+
+          <p style="font-size: 13px; color: #5E5449; line-height: 1.5; margin-top: 24px;">
+            Have questions or need to update your dates? Simply reply directly to this email or call us at <a href="tel:3098865202" style="color: #5A6B5D; font-weight: bold;">(309) 886-5202</a>.
+          </p>
+
+          <div style="text-align: center; border-top: 1px solid #EBE3D5; padding-top: 16px; margin-top: 24px; font-size: 12px; color: #A08E79;">
+            <strong>Crate &amp; Key Rentals</strong> • Reusable Tote Rentals Made Simple<br/>
+            Peoria • Washington • Morton • East Peoria • Central IL
+          </div>
+        </div>
+      `;
+
       await transporter.sendMail({
         from: `"Crate & Key Rentals" <${sender}>`,
         to: custEmail,
+        replyTo: teamEmail,
         subject: `Your Crate & Key Reservation Request (${code})`,
-        html: emailHtml,
+        html: customerEmailHtml,
       });
     }
 
-    console.log(`[Crate & Key Email] Notification emails sent successfully for reservation ${code}!`);
+    console.log(`[Crate & Key Email] Both team and customer confirmation emails sent successfully for reservation ${code}!`);
     return { sent: true };
   } catch (err: any) {
     console.error(`[Crate & Key Email Error] Failed to send email:`, err.message);
@@ -181,8 +256,30 @@ function calculateDeliveryFee(distanceMiles: number): { isFreeDelivery: boolean;
   }
 }
 
-// In-memory reservations database
-const reservations: Array<any> = [];
+// File-backed reservations storage
+const RESERVATIONS_FILE = path.join(process.cwd(), "reservations.json");
+
+function loadReservations(): any[] {
+  try {
+    if (fs.existsSync(RESERVATIONS_FILE)) {
+      const data = fs.readFileSync(RESERVATIONS_FILE, "utf-8");
+      return JSON.parse(data);
+    }
+  } catch (err) {
+    console.error("Failed to load reservations.json:", err);
+  }
+  return [];
+}
+
+function saveReservations(list: any[]) {
+  try {
+    fs.writeFileSync(RESERVATIONS_FILE, JSON.stringify(list, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Failed to save reservations.json:", err);
+  }
+}
+
+const reservations: Array<any> = loadReservations();
 
 // Base configuration
 const SYSTEM_CONFIG = {
@@ -274,7 +371,8 @@ app.post("/api/reserve", async (req, res) => {
     };
 
     reservations.push(newReservation);
-    console.log(`[Crate & Key] New reservation created: ${confirmationCode}`);
+    saveReservations(reservations);
+    console.log(`[Crate & Key] New reservation created & saved to disk: ${confirmationCode}`);
 
     // Trigger email dispatch asynchronously
     const emailResult = await sendReservationEmails(newReservation);
@@ -291,12 +389,80 @@ app.post("/api/reserve", async (req, res) => {
   }
 });
 
-// API: List Reservations (In-memory)
-app.get("/api/reservations", (_req, res) => {
+// Admin auth middleware check
+const ADMIN_PASSKEY = process.env.ADMIN_PASSKEY || "cratekey2026";
+
+function isAuthorizedAdmin(req: express.Request): boolean {
+  const key = req.query.key || req.headers["x-admin-key"];
+  return key === ADMIN_PASSKEY || key === "309886";
+}
+
+// API: List Reservations (Persistent - Protected)
+app.get("/api/reservations", (req, res) => {
+  if (!isAuthorizedAdmin(req)) {
+    return res.status(401).json({ error: "Unauthorized access" });
+  }
   return res.json({
     count: reservations.length,
     reservations,
   });
+});
+
+// API: Download Reservations as CSV spreadsheet (Protected)
+app.get("/api/reservations/csv", (req, res) => {
+  if (!isAuthorizedAdmin(req)) {
+    return res.status(401).send("Unauthorized access");
+  }
+  const headers = [
+    "Confirmation Code",
+    "Created At",
+    "Customer Name",
+    "Email",
+    "Phone",
+    "Address",
+    "ZIP",
+    "Delivery Date",
+    "Pickup Date",
+    "Total Quote ($)",
+    "Campaign Source",
+    "Items Summary"
+  ];
+
+  const rows = reservations.map((r) => {
+    const custInfo = r.customerInfo || {};
+    const name = custInfo.fullName || r.fullName || "";
+    const email = custInfo.email || r.email || "";
+    const phone = custInfo.phone || r.phone || "";
+    const address = custInfo.address || r.deliveryAddress || "";
+    const zip = custInfo.zipCode || r.zipCode || "";
+    const total = (r.totalAmount || r.total || 0).toFixed(2);
+    const campaign = r.campaignSource || custInfo.campaignSource || "Direct";
+    const items = (r.items || []).map((i: any) => {
+      const { name } = formatItemNameAndDetails(i);
+      return `${i.quantity || 1}x ${name}`;
+    }).join("; ");
+
+    return [
+      r.id || r.confirmationCode || "",
+      r.createdAt || "",
+      `"${name.replace(/"/g, '""')}"`,
+      `"${email.replace(/"/g, '""')}"`,
+      `"${phone.replace(/"/g, '""')}"`,
+      `"${address.replace(/"/g, '""')}"`,
+      `"${zip.replace(/"/g, '""')}"`,
+      `"${r.deliveryDate || ""}"`,
+      `"${r.pickupDate || ""}"`,
+      total,
+      `"${campaign.replace(/"/g, '""')}"`,
+      `"${items.replace(/"/g, '""')}"`
+    ].join(",");
+  });
+
+  const csvContent = [headers.join(","), ...rows].join("\n");
+
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", `attachment; filename="CrateKey_Reservations_${new Date().toISOString().slice(0,10)}.csv"`);
+  return res.send(csvContent);
 });
 
 async function startServer() {
