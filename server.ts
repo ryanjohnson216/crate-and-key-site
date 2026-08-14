@@ -13,9 +13,11 @@ const PORT = 3000;
 app.use(express.json());
 
 // Helper to construct Nodemailer transporter based on ENV vars
+let customRuntimeAppPassword = "";
+
 function getEmailTransporter() {
   const user = process.env.GMAIL_USER || process.env.SMTP_USER || "crateandkeyrentals@gmail.com";
-  const rawPass = process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS || "";
+  const rawPass = customRuntimeAppPassword || process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS || "";
   const pass = rawPass.replace(/\s+/g, "");
 
   if (!pass) {
@@ -393,7 +395,7 @@ app.post("/api/reserve", async (req, res) => {
 const ADMIN_PASSKEY = process.env.ADMIN_PASSKEY || "cratekey2026";
 
 function isAuthorizedAdmin(req: express.Request): boolean {
-  const key = req.query.key || req.headers["x-admin-key"];
+  const key = req.query.key || req.headers["x-admin-key"] || req.body?.key;
   return key === ADMIN_PASSKEY || key === "309886";
 }
 
@@ -463,6 +465,89 @@ app.get("/api/reservations/csv", (req, res) => {
   res.setHeader("Content-Type", "text/csv");
   res.setHeader("Content-Disposition", `attachment; filename="CrateKey_Reservations_${new Date().toISOString().slice(0,10)}.csv"`);
   return res.send(csvContent);
+});
+
+// API: Get Email Server Transporter Status (Protected)
+app.get("/api/admin/email-status", (req, res) => {
+  if (!isAuthorizedAdmin(req)) {
+    return res.status(401).json({ error: "Unauthorized access" });
+  }
+  const transporter = getEmailTransporter();
+  const configuredUser = process.env.GMAIL_USER || process.env.SMTP_USER || "crateandkeyrentals@gmail.com";
+  return res.json({
+    configured: !!transporter,
+    user: configuredUser,
+  });
+});
+
+// API: Configure Email Password at Runtime (Protected)
+app.post("/api/admin/email-config", (req, res) => {
+  if (!isAuthorizedAdmin(req)) {
+    return res.status(401).json({ error: "Unauthorized access" });
+  }
+  const { appPassword } = req.body || {};
+  if (!appPassword || typeof appPassword !== "string" || appPassword.trim().length < 8) {
+    return res.status(400).json({ error: "Please enter a valid Gmail App Password." });
+  }
+
+  customRuntimeAppPassword = appPassword.trim();
+  process.env.GMAIL_APP_PASSWORD = customRuntimeAppPassword;
+
+  // Attempt to write to .env
+  try {
+    const envPath = path.join(process.cwd(), ".env");
+    let content = "";
+    if (fs.existsSync(envPath)) {
+      content = fs.readFileSync(envPath, "utf-8");
+    }
+    if (content.includes("GMAIL_APP_PASSWORD=")) {
+      content = content.replace(/GMAIL_APP_PASSWORD=.*/g, `GMAIL_APP_PASSWORD="${customRuntimeAppPassword}"`);
+    } else {
+      content += `\nGMAIL_APP_PASSWORD="${customRuntimeAppPassword}"\n`;
+    }
+    fs.writeFileSync(envPath, content, "utf-8");
+  } catch (e) {
+    console.warn("Could not write to .env file:", e);
+  }
+
+  const transporter = getEmailTransporter();
+  return res.json({
+    success: true,
+    configured: !!transporter,
+    message: "Gmail App Password saved successfully and activated!",
+  });
+});
+
+// API: Send Test Email (Protected)
+app.post("/api/admin/test-email", async (req, res) => {
+  if (!isAuthorizedAdmin(req)) {
+    return res.status(401).json({ error: "Unauthorized access" });
+  }
+  const targetEmail = req.body.email || "crateandkeyrentals@gmail.com";
+  const testReservation = {
+    id: "CK-TEST-999999",
+    createdAt: new Date().toISOString(),
+    status: "Confirmed",
+    customerInfo: {
+      fullName: "Owner Test Verification",
+      email: targetEmail,
+      phone: "309-886-5202",
+      address: "123 Main St",
+      zipCode: "61571",
+      campaignSource: "Admin Panel Email Test",
+    },
+    items: [{ id: "pkg-studio", name: "The Starter Pack", quantity: 1, pricePerUnit: 120 }],
+    deliveryDate: "2026-09-01",
+    pickupDate: "2026-09-15",
+    totalAmount: 120,
+  };
+
+  const result = await sendReservationEmails(testReservation);
+  if (result.sent) {
+    return res.json({ success: true, message: `Test email sent successfully to ${targetEmail} and team inbox!` });
+  } else {
+    return res.status(500).json({ success: false, error: result.error || result.reason || "Failed to send test email." });
+  }
 });
 
 async function startServer() {

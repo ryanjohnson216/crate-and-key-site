@@ -19,10 +19,11 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
 const provider = new GoogleAuthProvider();
+provider.setCustomParameters({ prompt: "select_account" });
 SCOPES.forEach((scope) => provider.addScope(scope));
 
 let isSigningIn = false;
-let cachedAccessToken: string | null = null;
+let cachedAccessToken: string | null = localStorage.getItem("crate_key_google_access_token");
 let cachedUser: User | null = null;
 
 // Initialize Auth listener
@@ -32,16 +33,20 @@ export const initAuth = (
 ) => {
   return onAuthStateChanged(auth, async (user: User | null) => {
     cachedUser = user;
-    if (user) {
-      if (cachedAccessToken) {
-        if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
-      } else if (!isSigningIn) {
-        cachedAccessToken = null;
+    const storedToken = localStorage.getItem("crate_key_google_access_token");
+    const token = cachedAccessToken || storedToken;
+
+    if (user && token) {
+      cachedAccessToken = token;
+      if (onAuthSuccess) onAuthSuccess(user, token);
+    } else {
+      if (!isSigningIn) {
+        if (!user) {
+          cachedAccessToken = null;
+          localStorage.removeItem("crate_key_google_access_token");
+        }
         if (onAuthFailure) onAuthFailure();
       }
-    } else {
-      cachedAccessToken = null;
-      if (onAuthFailure) onAuthFailure();
     }
   });
 };
@@ -60,6 +65,7 @@ export const googleSignIn = async (): Promise<{
     }
 
     cachedAccessToken = credential.accessToken;
+    localStorage.setItem("crate_key_google_access_token", credential.accessToken);
     cachedUser = result.user;
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
@@ -71,7 +77,7 @@ export const googleSignIn = async (): Promise<{
 };
 
 export const getAccessToken = async (): Promise<string | null> => {
-  return cachedAccessToken;
+  return cachedAccessToken || localStorage.getItem("crate_key_google_access_token");
 };
 
 export const getCachedUser = (): User | null => {
@@ -82,6 +88,7 @@ export const googleLogout = async () => {
   await signOut(auth);
   cachedAccessToken = null;
   cachedUser = null;
+  localStorage.removeItem("crate_key_google_access_token");
 };
 
 // --- GOOGLE SHEETS HELPER ---
@@ -299,10 +306,21 @@ export const sendReservationEmailNotification = async (
   accessToken: string,
   reservation: any
 ) => {
-  const recipient = reservation.email;
-  if (!recipient) return;
+  const custEmail = reservation.customerInfo?.email || reservation.email || "";
+  const teamEmail = "crateandkeyrentals@gmail.com";
+  const recipients = Array.from(new Set([custEmail, teamEmail])).filter(Boolean);
+
+  if (recipients.length === 0) return;
 
   const code = reservation.id || reservation.confirmationCode || "CK-XXXXXX";
+  const custName = reservation.customerInfo?.fullName || reservation.fullName || "Valued Customer";
+  const custPhone = reservation.customerInfo?.phone || reservation.phone || "Not provided";
+  const custAddr = reservation.customerInfo?.address || reservation.streetAddress || reservation.deliveryAddress || "Not provided";
+  const custZip = reservation.customerInfo?.zipCode || reservation.zipCode || "";
+  const total = (reservation.totalAmount || reservation.total || reservation.pricing?.totalPrice || 0).toFixed(2);
+  const deliveryDate = reservation.deliveryDate || "TBD";
+  const pickupDate = reservation.pickupDate || "TBD";
+
   const itemsList = (reservation.items || [])
     .map((i: any) => {
       let name = i.name || i.title || "Tote Rental Package";
@@ -326,17 +344,22 @@ export const sendReservationEmailNotification = async (
     })
     .join("");
 
-  const emailContent = `To: ${recipient}
-Subject: Reservation Request Confirmed - Crate & Key (${code})
-Content-Type: text/html; charset=utf-8
+  const results = [];
 
+  for (const recipient of recipients) {
+    const isTeam = recipient === teamEmail;
+    const subject = isTeam
+      ? `[New Reservation Request] ${code} - ${custName}`
+      : `Your Crate & Key Reservation Request (${code})`;
+
+    const emailHtml = `
 <!DOCTYPE html>
 <html>
 <head>
   <style>
     body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #FDFBF7; color: #3E362E; margin: 0; padding: 20px; }
     .card { background: #ffffff; border: 1px solid #EBE3D5; border-radius: 12px; max-width: 600px; margin: 0 auto; padding: 30px; }
-    .header { border-bottom: 2px solid #5A6B5D; padding-bottom: 15px; margin-bottom: 20px; }
+    .header { border-bottom: 2px solid #5A6B5D; padding-bottom: 15px; margin-bottom: 20px; text-align: center; }
     .code { font-size: 22px; font-weight: bold; color: #5A6B5D; letter-spacing: 1px; }
     .details-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
     .details-table td { padding: 8px 0; border-bottom: 1px solid #F3EDE2; }
@@ -346,58 +369,62 @@ Content-Type: text/html; charset=utf-8
 <body>
   <div class="card">
     <div class="header">
-      <h2 style="margin:0; color:#3E362E;">Crate & Key Tote Rental</h2>
-      <p style="margin:5px 0 0 0; color:#5A6B5D;">Peoria &amp; Washington, IL Local Service</p>
+      <h2 style="margin:0; color:#3E362E; font-family: serif;">Crate &amp; Key Rentals</h2>
+      <p style="margin:5px 0 0 0; color:#5A6B5D; font-size: 13px;">Reusable Moving Totes • Peoria &amp; Central Illinois</p>
     </div>
-    <h3>Reservation Request Received!</h3>
-    <p>Hi ${reservation.fullName || "Customer"},</p>
-    <p>Thank you for choosing Crate & Key for your upcoming move. We have received your reservation request and hold on inventory.</p>
+    <h3 style="color: #2D2A26;">${isTeam ? "New Reservation Request Received" : "Reservation Request Received!"}</h3>
+    <p>Hello <strong>${isTeam ? "Crate & Key Team" : custName}</strong>,</p>
+    <p>${isTeam ? `A new reservation request (<strong>${code}</strong>) was placed on the website:` : `Thank you for choosing Crate & Key for your upcoming move! We have received your reservation request (<strong>${code}</strong>).`}</p>
     
     <div style="background:#F5F2ED; padding:15px; border-radius:8px; margin:20px 0;">
       <span style="font-size:12px; text-transform:uppercase; color:#7E6E5C; font-weight:bold;">Confirmation Code</span><br/>
       <span class="code">${code}</span>
     </div>
 
-    <h4>Delivery Summary:</h4>
+    <h4>Customer Details:</h4>
     <table class="details-table">
-      <tr><td><strong>Delivery Date:</strong></td><td>${reservation.deliveryDate}</td></tr>
-      <tr><td><strong>Pickup Date:</strong></td><td>${reservation.pickupDate}</td></tr>
-      <tr><td><strong>Address:</strong></td><td>${reservation.streetAddress}, ${reservation.city}, IL ${reservation.zipCode}</td></tr>
-      <tr><td><strong>Estimated Total:</strong></td><td>$${(reservation.pricing?.totalPrice || 0).toFixed(2)}</td></tr>
+      <tr><td><strong>Name:</strong></td><td>${custName}</td></tr>
+      <tr><td><strong>Email:</strong></td><td>${custEmail}</td></tr>
+      <tr><td><strong>Phone:</strong></td><td>${custPhone}</td></tr>
+      <tr><td><strong>Delivery Address:</strong></td><td>${custAddr}, ${custZip}</td></tr>
+      <tr><td><strong>Scheduled Drop-Off:</strong></td><td>${deliveryDate}</td></tr>
+      <tr><td><strong>Scheduled Return Pickup:</strong></td><td>${pickupDate}</td></tr>
+      <tr><td><strong>Estimated Base Quote:</strong></td><td><strong>$${total}</strong></td></tr>
     </table>
 
     <h4>Reserved Items:</h4>
-    <ul>
-      ${itemsList}
-    </ul>
+    <ul>${itemsList}</ul>
 
-    <p style="margin-top:20px;">Our local team will review tote availability for your dates and email you invoice &amp; payment instructions. No charge is made until you approve the payment link!</p>
+    <p style="margin-top:20px;">${isTeam ? "Please follow up with the customer to confirm delivery timing." : "Our local team will review tote availability for your dates and reach out to confirm drop-off details."}</p>
 
     <div class="footer">
-      <p>Crate & Key • Washington, IL 61571 • hello@crateandkey.com</p>
+      <p>Crate & Key • Peoria / Washington, IL • crateandkeyrentals@gmail.com • (309) 886-5202</p>
     </div>
   </div>
 </body>
 </html>`;
 
-  const rawBase64 = utf8ToBase64Url(emailContent);
+    const rawBase64 = utf8ToBase64Url(`To: ${recipient}\nSubject: ${subject}\nContent-Type: text/html; charset=utf-8\n\n${emailHtml}`);
 
-  const sendRes = await fetch(
-    `https://gmail.googleapis.com/gmail/v1/users/me/messages/send`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ raw: rawBase64 }),
+    const sendRes = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/send`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ raw: rawBase64 }),
+      }
+    );
+
+    if (!sendRes.ok) {
+      const errText = await sendRes.text();
+      console.error(`Failed to send email to ${recipient} via Gmail API:`, errText);
+    } else {
+      results.push(await sendRes.json());
     }
-  );
-
-  if (!sendRes.ok) {
-    const errText = await sendRes.text();
-    throw new Error(`Failed to send confirmation email via Gmail: ${errText}`);
   }
 
-  return await sendRes.json();
+  return results;
 };

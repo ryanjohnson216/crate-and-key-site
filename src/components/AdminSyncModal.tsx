@@ -11,6 +11,10 @@ import {
   UserCheck,
   KeyRound,
   ShieldAlert,
+  Mail,
+  Send,
+  Check,
+  AlertTriangle,
 } from "lucide-react";
 import {
   googleSignIn,
@@ -41,18 +45,37 @@ export const AdminSyncModal: React.FC<AdminSyncModalProps> = ({
   const [reservationsCount, setReservationsCount] = useState<number>(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Server Email Transporter State
+  const [emailStatus, setEmailStatus] = useState<{ configured: boolean; user: string } | null>(null);
+  const [appPasswordInput, setAppPasswordInput] = useState("");
+  const [isSavingAppPass, setIsSavingAppPass] = useState(false);
+  const [emailMsg, setEmailMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [isTestingEmail, setIsTestingEmail] = useState(false);
+
   useEffect(() => {
     if (!isOpen) return;
 
     // Reset auth state when modal opens
-    setPasscode("");
     setAuthError(null);
 
-    // If already authenticated, fetch reservation count
-    if (isAuthenticated) {
+    // If already authenticated, fetch reservation count & email status
+    if (isAuthenticated && passcode) {
       fetchReservations(passcode);
+      fetchEmailStatus(passcode);
     }
   }, [isOpen]);
+
+  const fetchEmailStatus = async (key: string) => {
+    try {
+      const res = await fetch(`/api/admin/email-status?key=${encodeURIComponent(key)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setEmailStatus(data);
+      }
+    } catch (e) {
+      console.warn("Could not fetch email status:", e);
+    }
+  };
 
   const fetchReservations = async (key: string) => {
     try {
@@ -62,6 +85,7 @@ export const AdminSyncModal: React.FC<AdminSyncModalProps> = ({
         setReservationsCount(data.count || 0);
         setIsAuthenticated(true);
         setAuthError(null);
+        fetchEmailStatus(key);
       } else {
         setIsAuthenticated(false);
         setAuthError("Invalid Owner Passcode. Please try again.");
@@ -147,13 +171,64 @@ export const AdminSyncModal: React.FC<AdminSyncModalProps> = ({
     }
   };
 
+  const handleSaveAppPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!appPasswordInput.trim()) return;
+
+    setIsSavingAppPass(true);
+    setEmailMsg(null);
+
+    try {
+      const res = await fetch("/api/admin/email-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: passcode, appPassword: appPasswordInput.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setEmailStatus({ configured: true, user: "crateandkeyrentals@gmail.com" });
+        setEmailMsg({ type: "success", text: "Gmail App Password saved! Email transporter is now active." });
+        setAppPasswordInput("");
+      } else {
+        setEmailMsg({ type: "error", text: data.error || "Failed to update email configuration." });
+      }
+    } catch (err: any) {
+      setEmailMsg({ type: "error", text: err.message || "Network error while saving." });
+    } finally {
+      setIsSavingAppPass(false);
+    }
+  };
+
+  const handleSendTestEmail = async () => {
+    setIsTestingEmail(true);
+    setEmailMsg(null);
+
+    try {
+      const res = await fetch("/api/admin/test-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: passcode, email: "crateandkeyrentals@gmail.com" }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setEmailMsg({ type: "success", text: data.message });
+      } else {
+        setEmailMsg({ type: "error", text: data.error || "Test email sending failed." });
+      }
+    } catch (err: any) {
+      setEmailMsg({ type: "error", text: err.message || "Error attempting to send test email." });
+    } finally {
+      setIsTestingEmail(false);
+    }
+  };
+
   const handleDownloadCSV = () => {
     window.open(`/api/reservations/csv?key=${encodeURIComponent(passcode)}`, "_blank");
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-[#FDFBF7] rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-[#EBE3D5] relative overflow-hidden">
+      <div className="bg-[#FDFBF7] rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-[#EBE3D5] relative overflow-y-auto max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-[#EBE3D5] mb-5">
           <div className="flex items-center gap-3">
@@ -229,9 +304,9 @@ export const AdminSyncModal: React.FC<AdminSyncModalProps> = ({
           </form>
         ) : (
           /* Authenticated Admin Controls */
-          <div>
+          <div className="space-y-5">
             {/* Stats banner */}
-            <div className="bg-[#F5F2ED] rounded-xl p-4 mb-5 flex items-center justify-between border border-[#EBE3D5]">
+            <div className="bg-[#F5F2ED] rounded-xl p-4 flex items-center justify-between border border-[#EBE3D5]">
               <div>
                 <span className="text-xs font-semibold uppercase tracking-wider text-[#7E6E5C]">
                   Total Stored Requests
@@ -249,12 +324,97 @@ export const AdminSyncModal: React.FC<AdminSyncModalProps> = ({
               </button>
             </div>
 
+            {/* Email Dispatch Configuration Card */}
+            <div className="bg-white rounded-xl p-5 border border-[#EBE3D5] shadow-xs">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-bold text-sm text-[#2D2A26] flex items-center gap-2">
+                  <Mail className="w-4 h-4 text-[#5A6B5D]" />
+                  Automated Customer &amp; Owner Email Dispatch
+                </h4>
+                {emailStatus?.configured ? (
+                  <span className="text-[11px] font-bold text-[#2e7d32] bg-[#EBF3EC] px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                    <Check className="w-3 h-3" />
+                    Active
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-bold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full flex items-center gap-1 border border-amber-200">
+                    <AlertTriangle className="w-3 h-3" />
+                    Action Required
+                  </span>
+                )}
+              </div>
+
+              <p className="text-xs text-[#5E5449] mb-3 leading-relaxed">
+                Sends automated reservation confirmation receipts to customers and alerts to <strong>crateandkeyrentals@gmail.com</strong>.
+              </p>
+
+              {emailStatus?.configured ? (
+                <div className="space-y-3">
+                  <div className="text-xs text-[#2e7d32] bg-[#EBF3EC] p-3 rounded-lg border border-[#A8C7AD] flex items-center justify-between">
+                    <div>
+                      <strong>Email Transporter Active</strong>
+                      <p className="text-[11px] text-[#3A4B3D] mt-0.5">Connected to {emailStatus.user}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSendTestEmail}
+                      disabled={isTestingEmail}
+                      className="px-3 py-1.5 rounded-lg bg-[#5A6B5D] hover:bg-[#4A594D] text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                    >
+                      <Send className="w-3 h-3" />
+                      {isTestingEmail ? "Sending..." : "Send Test Email"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleSaveAppPassword} className="space-y-3">
+                  <div className="bg-[#F5F2ED] p-3 rounded-lg text-xs text-[#5E5449] border border-[#EBE3D5] space-y-1">
+                    <p className="font-semibold text-[#2D2A26]">To enable 24/7 automated emails:</p>
+                    <ol className="list-decimal pl-4 space-y-0.5 text-[11px] text-[#7E6E5C]">
+                      <li>Go to <strong>Google Account</strong> for crateandkeyrentals@gmail.com</li>
+                      <li>Navigate to <strong>Security &gt; 2-Step Verification &gt; App passwords</strong></li>
+                      <li>Create a password named <em>"Crate &amp; Key Website"</em> and paste the 16-character code below:</li>
+                    </ol>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="password"
+                      value={appPasswordInput}
+                      onChange={(e) => setAppPasswordInput(e.target.value)}
+                      placeholder="Paste 16-character Gmail App Password..."
+                      className="flex-1 px-3 py-2 rounded-lg border border-[#D5C9B8] bg-white text-xs text-[#2D2A26] focus:outline-none focus:ring-2 focus:ring-[#5A6B5D]"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isSavingAppPass || !appPasswordInput.trim()}
+                      className="px-4 py-2 rounded-lg bg-[#5A6B5D] hover:bg-[#4A594D] text-white text-xs font-bold transition cursor-pointer disabled:opacity-50 shrink-0"
+                    >
+                      {isSavingAppPass ? "Saving..." : "Save Password"}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {emailMsg && (
+                <div
+                  className={`mt-3 p-2.5 rounded-lg text-xs font-medium ${
+                    emailMsg.type === "success"
+                      ? "bg-[#EBF3EC] border border-[#A8C7AD] text-[#2e7d32]"
+                      : "bg-red-50 border border-red-200 text-red-700"
+                  }`}
+                >
+                  {emailMsg.text}
+                </div>
+              )}
+            </div>
+
             {/* Google Workspace Connection Card */}
-            <div className="bg-white rounded-xl p-5 border border-[#EBE3D5] shadow-xs mb-5">
+            <div className="bg-white rounded-xl p-5 border border-[#EBE3D5] shadow-xs">
               <div className="flex items-center justify-between mb-3">
                 <h4 className="font-bold text-sm text-[#2D2A26] flex items-center gap-2">
                   <FileSpreadsheet className="w-4 h-4 text-[#5A6B5D]" />
-                  Google Sheets Integration
+                  Google Workspace &amp; Sheets Integration
                 </h4>
                 {currentUser && (
                   <span className="text-[11px] font-bold text-[#2e7d32] bg-[#EBF3EC] px-2.5 py-0.5 rounded-full flex items-center gap-1">
@@ -265,7 +425,7 @@ export const AdminSyncModal: React.FC<AdminSyncModalProps> = ({
               </div>
 
               <p className="text-xs text-[#5E5449] mb-4 leading-relaxed">
-                Connect your Google account (<strong>crateandkeyrentals@gmail.com</strong>) to sync reservations to Google Drive.
+                Connect your Google account (<strong>crateandkeyrentals@gmail.com</strong>) to sync reservations to Google Sheets in Drive.
               </p>
 
               {currentUser ? (
@@ -313,7 +473,7 @@ export const AdminSyncModal: React.FC<AdminSyncModalProps> = ({
                       d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                     />
                   </svg>
-                  Sign in with Google Workspace
+                  Connect Google Workspace Account
                 </button>
               )}
 
