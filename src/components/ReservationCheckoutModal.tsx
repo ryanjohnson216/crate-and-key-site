@@ -244,17 +244,19 @@ export const ReservationCheckoutModal: React.FC<ReservationCheckoutModalProps> =
     };
 
     try {
+      const fullDeliveryAddress = `${address}${aptSuite ? `, ${aptSuite}` : ""}`;
       // Submit Reservation Request
       const res = await fetch("/api/reserve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          customerInfo: { fullName, email, phone, address, zipCode, campaignSource },
+          customerInfo: { fullName, email, phone, address: fullDeliveryAddress, zipCode, campaignSource, dropoffNotes },
           items: cart,
           deliveryDate,
           pickupDate,
           totalAmount: grandTotal,
           campaignSource,
+          dropoffNotes,
           isRequestOnly: true,
         }),
       });
@@ -379,7 +381,7 @@ export const ReservationCheckoutModal: React.FC<ReservationCheckoutModalProps> =
                     min={formatDateInput(today)}
                     onChange={(e) => handleDeliveryDateChange(e.target.value)}
                     required
-                    className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-[#EBE3D5] bg-white text-[#2D2A26]"
+                    className="w-full px-3 py-2.5 text-base sm:text-xs font-semibold rounded-xl border border-[#EBE3D5] bg-white text-[#2D2A26]"
                   />
                 </div>
 
@@ -393,7 +395,7 @@ export const ReservationCheckoutModal: React.FC<ReservationCheckoutModalProps> =
                     min={deliveryDate}
                     onChange={(e) => setPickupDate(e.target.value)}
                     required
-                    className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-[#EBE3D5] bg-white text-[#2D2A26]"
+                    className="w-full px-3 py-2.5 text-base sm:text-xs font-semibold rounded-xl border border-[#EBE3D5] bg-white text-[#2D2A26]"
                   />
                 </div>
               </div>
@@ -425,7 +427,7 @@ export const ReservationCheckoutModal: React.FC<ReservationCheckoutModalProps> =
                     value={address}
                     onChange={(e) => setAddress(e.target.value)}
                     required
-                    className="w-full px-3 py-2 rounded-xl border border-[#EBE3D5] bg-white text-[#2D2A26] font-medium"
+                    className="w-full px-3 py-2.5 rounded-xl border border-[#EBE3D5] bg-white text-[#2D2A26] text-base sm:text-xs font-medium"
                   />
                 </div>
 
@@ -436,7 +438,7 @@ export const ReservationCheckoutModal: React.FC<ReservationCheckoutModalProps> =
                     placeholder="Apt 4B (Optional)"
                     value={aptSuite}
                     onChange={(e) => setAptSuite(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-[#EBE3D5] bg-white text-[#2D2A26] font-medium"
+                    className="w-full px-3 py-2.5 rounded-xl border border-[#EBE3D5] bg-white text-[#2D2A26] text-base sm:text-xs font-medium"
                   />
                 </div>
 
@@ -448,7 +450,7 @@ export const ReservationCheckoutModal: React.FC<ReservationCheckoutModalProps> =
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
                     required
-                    className="w-full px-3 py-2 rounded-xl border border-[#EBE3D5] bg-white text-[#2D2A26] font-medium"
+                    className="w-full px-3 py-2.5 rounded-xl border border-[#EBE3D5] bg-white text-[#2D2A26] text-base sm:text-xs font-medium"
                   />
                 </div>
 
@@ -461,7 +463,7 @@ export const ReservationCheckoutModal: React.FC<ReservationCheckoutModalProps> =
                     maxLength={5}
                     onChange={(e) => handleZipValidation(e.target.value)}
                     required
-                    className="w-full px-3 py-2 rounded-xl border border-[#EBE3D5] bg-white text-[#2D2A26] font-bold"
+                    className="w-full px-3 py-2.5 rounded-xl border border-[#EBE3D5] bg-white text-[#2D2A26] text-base sm:text-xs font-bold"
                   />
                 </div>
 
@@ -480,7 +482,7 @@ export const ReservationCheckoutModal: React.FC<ReservationCheckoutModalProps> =
                     placeholder="e.g. Leave stacked on front porch / inside garage"
                     value={dropoffNotes}
                     onChange={(e) => setDropoffNotes(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-[#EBE3D5] bg-white text-[#2D2A26] font-medium"
+                    className="w-full px-3 py-2.5 rounded-xl border border-[#EBE3D5] bg-white text-[#2D2A26] text-base sm:text-xs font-medium"
                   />
                 </div>
               </div>
@@ -498,7 +500,7 @@ export const ReservationCheckoutModal: React.FC<ReservationCheckoutModalProps> =
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     required
-                    className="w-full px-3 py-2 rounded-xl border border-[#EBE3D5] bg-white text-[#2D2A26] font-medium"
+                    className="w-full px-3 py-2.5 rounded-xl border border-[#EBE3D5] bg-white text-[#2D2A26] text-base sm:text-xs font-medium"
                   />
                 </div>
 
@@ -510,7 +512,7 @@ export const ReservationCheckoutModal: React.FC<ReservationCheckoutModalProps> =
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
-                    className="w-full px-3 py-2 rounded-xl border border-[#EBE3D5] bg-white text-[#2D2A26] font-medium"
+                    className="w-full px-3 py-2.5 rounded-xl border border-[#EBE3D5] bg-white text-[#2D2A26] text-base sm:text-xs font-medium"
                   />
                 </div>
 
@@ -522,7 +524,7 @@ export const ReservationCheckoutModal: React.FC<ReservationCheckoutModalProps> =
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     required
-                    className="w-full px-3 py-2 rounded-xl border border-[#EBE3D5] bg-white text-[#2D2A26] font-medium"
+                    className="w-full px-3 py-2.5 rounded-xl border border-[#EBE3D5] bg-white text-[#2D2A26] text-base sm:text-xs font-medium"
                   />
                 </div>
               </div>

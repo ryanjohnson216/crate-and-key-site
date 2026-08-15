@@ -73,6 +73,7 @@ async function sendReservationEmails(reservation: any) {
   const custPhone = reservation.customerInfo?.phone || reservation.phone || "Not provided";
   const custAddr = reservation.customerInfo?.address || reservation.deliveryAddress || "Not provided";
   const custZip = reservation.customerInfo?.zipCode || reservation.zipCode || "";
+  const dropoffNotes = reservation.dropoffNotes || reservation.customerInfo?.dropoffNotes || "";
   const code = reservation.id || reservation.confirmationCode;
   const deliveryDate = reservation.deliveryDate || "TBD";
   const pickupDate = reservation.pickupDate || "TBD";
@@ -103,6 +104,7 @@ async function sendReservationEmails(reservation: any) {
         <p style="margin: 4px 0;"><strong>Email:</strong> <a href="mailto:${custEmail}">${custEmail}</a></p>
         <p style="margin: 4px 0;"><strong>Phone:</strong> <a href="tel:${custPhone}">${custPhone}</a></p>
         <p style="margin: 4px 0;"><strong>Delivery Address:</strong> ${custAddr}, ${custZip}</p>
+        ${dropoffNotes ? `<p style="margin: 4px 0;"><strong>Drop-Off Notes:</strong> ${dropoffNotes}</p>` : ""}
         <p style="margin: 4px 0;"><strong>Lead / Campaign Source:</strong> <span style="background: #E5DCCF; padding: 2px 8px; border-radius: 4px; font-weight: bold; color: #3E362E;">${campaignSource}</span></p>
       </div>
 
@@ -174,6 +176,7 @@ async function sendReservationEmails(reservation: any) {
             <p style="margin: 6px 0; font-size: 13px;"><strong>Scheduled Drop-Off:</strong> ${deliveryDate}</p>
             <p style="margin: 6px 0; font-size: 13px;"><strong>Scheduled Return Pickup:</strong> ${pickupDate}</p>
             <p style="margin: 6px 0; font-size: 13px;"><strong>Delivery Address:</strong> ${custAddr}, ${custZip}</p>
+            ${dropoffNotes ? `<p style="margin: 6px 0; font-size: 13px;"><strong>Drop-Off Notes:</strong> ${dropoffNotes}</p>` : ""}
             <p style="margin: 6px 0; font-size: 13px;"><strong>Delivery Fee:</strong> ${
               isFreeDelivery
                 ? `<span style="color: #2e7d32; font-weight: bold;">FREE ${isPostcard ? '(Postcard Offer)' : '(Local Zone)'}</span>`
