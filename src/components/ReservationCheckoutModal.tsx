@@ -263,30 +263,32 @@ export const ReservationCheckoutModal: React.FC<ReservationCheckoutModalProps> =
       const data = await res.json();
       reservation.confirmationCode = data.confirmationCode || "REQ-" + Math.floor(100000 + Math.random() * 900000);
 
-      // Perform Google Workspace sync if connected
+      // Optional Google Workspace sync in background (non-blocking)
       if (googleToken) {
-        if (syncToSheets) {
-          try {
-            await appendReservationToGoogleSheet(googleToken, {
-              ...reservation,
-              streetAddress: address,
-              pricing: { totalPrice: grandTotal },
-            });
-          } catch (sheetErr) {
-            console.error("Google Sheets sync error:", sheetErr);
+        (async () => {
+          if (syncToSheets) {
+            try {
+              await appendReservationToGoogleSheet(googleToken, {
+                ...reservation,
+                streetAddress: address,
+                pricing: { totalPrice: grandTotal },
+              });
+            } catch (sheetErr) {
+              console.error("Google Sheets sync error:", sheetErr);
+            }
           }
-        }
-        if (syncToGmail) {
-          try {
-            await sendReservationEmailNotification(googleToken, {
-              ...reservation,
-              streetAddress: address,
-              pricing: { totalPrice: grandTotal },
-            });
-          } catch (gmailErr) {
-            console.error("Gmail notification error:", gmailErr);
+          if (syncToGmail) {
+            try {
+              await sendReservationEmailNotification(googleToken, {
+                ...reservation,
+                streetAddress: address,
+                pricing: { totalPrice: grandTotal },
+              });
+            } catch (gmailErr) {
+              console.error("Gmail notification error:", gmailErr);
+            }
           }
-        }
+        })();
       }
 
       // Track GA purchase / reservation request event

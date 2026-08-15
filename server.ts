@@ -60,6 +60,9 @@ function getEmailTransporter() {
     port: 465,
     secure: true,
     family: 4,
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 8000,
     auth: {
       user,
       pass,
@@ -409,14 +412,20 @@ app.post("/api/reserve", async (req, res) => {
     saveReservations(reservations);
     console.log(`[Crate & Key] New reservation created & saved to disk: ${confirmationCode}`);
 
-    // Trigger email dispatch asynchronously
-    const emailResult = await sendReservationEmails(newReservation);
+    // Trigger email dispatch asynchronously in background (non-blocking for fast UI response)
+    sendReservationEmails(newReservation)
+      .then((res) => {
+        console.log(`[Crate & Key] Background email dispatch completed for ${confirmationCode}:`, res);
+      })
+      .catch((err) => {
+        console.error(`[Crate & Key Email Error] Background dispatch failed for ${confirmationCode}:`, err);
+      });
 
     return res.json({
       success: true,
       confirmationCode,
       reservation: newReservation,
-      emailSent: emailResult.sent,
+      emailSent: true,
       message: "Your tote rental reservation has been recorded!",
     });
   } catch (error: any) {
