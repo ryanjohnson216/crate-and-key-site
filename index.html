@@ -10,52 +10,9 @@
       function gtag(){dataLayer.push(arguments);}
       window.gtag = gtag;
       gtag('js', new Date());
-
-      // Immediate Campaign & Postcard QR Detection for GA4
-      try {
-        var urlParams = new URLSearchParams(window.location.search);
-        var fullUrl = window.location.href.toLowerCase();
-        
-        var utmSource = (urlParams.get('utm_source') || urlParams.get('source') || urlParams.get('ref') || urlParams.get('promo') || '').toLowerCase();
-        var utmCampaign = (urlParams.get('utm_campaign') || urlParams.get('campaign') || '').toLowerCase();
-        var utmMedium = (urlParams.get('utm_medium') || urlParams.get('medium') || 'qr').toLowerCase();
-
-        var isPostcard = utmSource === 'postcard' ||
-                         utmSource.indexOf('postcard') !== -1 ||
-                         utmCampaign.indexOf('postcard') !== -1 ||
-                         utmCampaign.indexOf('pending') !== -1 ||
-                         fullUrl.indexOf('postcard') !== -1 ||
-                         fullUrl.indexOf('ref=postcard') !== -1 ||
-                         fullUrl.indexOf('promo=postcard') !== -1;
-
-        var gaConfig = { cookie_flags: 'SameSite=None;Secure' };
-
-        if (isPostcard) {
-          gaConfig.campaign_source = 'postcard';
-          gaConfig.campaign_medium = utmMedium || 'qr';
-          gaConfig.campaign_name = utmCampaign || 'postcard_pending_home';
-          gtag('set', 'user_properties', { traffic_type: 'postcard_qr', campaign_source: 'postcard' });
-        } else if (utmSource) {
-          gaConfig.campaign_source = utmSource;
-          gaConfig.campaign_medium = utmMedium;
-          gaConfig.campaign_name = utmCampaign || 'campaign';
-        }
-
-        gtag('config', 'G-6N6JBCQNPV', gaConfig);
-
-        if (isPostcard) {
-          gtag('event', 'postcard_landing', {
-            event_category: 'Postcard Direct Mail',
-            event_label: 'Postcard QR Scan / Visit',
-            campaign_source: 'postcard',
-            campaign_medium: utmMedium || 'qr',
-            campaign_name: utmCampaign || 'postcard_pending_home',
-            page_location: window.location.href
-          });
-        }
-      } catch (e) {
-        gtag('config', 'G-6N6JBCQNPV', { cookie_flags: 'SameSite=None;Secure' });
-      }
+      gtag('config', 'G-6N6JBCQNPV', {
+        cookie_flags: 'SameSite=None;Secure'
+      });
     </script>
     <link rel="icon" type="image/svg+xml" href="/crate-and-key-icon.svg" />
     <title>Crate &amp; Key</title>

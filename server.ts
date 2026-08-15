@@ -24,7 +24,7 @@ function getEmailTransporter() {
     return null;
   }
 
-  // If host is explicitly specified (e.g. non-gmail), use host/port, otherwise standard gmail service
+  // If host is explicitly specified (e.g. non-gmail), use host/port
   if (process.env.SMTP_HOST && process.env.SMTP_HOST !== "smtp.gmail.com") {
     const host = process.env.SMTP_HOST;
     const port = parseInt(process.env.SMTP_PORT || "587", 10);
@@ -32,17 +32,22 @@ function getEmailTransporter() {
       host,
       port,
       secure: port === 465,
+      family: 4,
       auth: { user, pass },
-    });
+    } as any);
   }
 
+  // Use explicit host smtp.gmail.com with family: 4 to force IPv4 connection and avoid IPv6 ENETUNREACH in containers
   return nodemailer.createTransport({
-    service: "gmail",
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    family: 4,
     auth: {
       user,
       pass,
     },
-  });
+  } as any);
 }
 
 // Helper to standardize package names and descriptions to match catalog nomenclature

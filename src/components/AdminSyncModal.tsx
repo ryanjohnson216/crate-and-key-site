@@ -348,22 +348,31 @@ export const AdminSyncModal: React.FC<AdminSyncModalProps> = ({
                 Sends automated reservation confirmation receipts to customers and alerts to <strong>crateandkeyrentals@gmail.com</strong>.
               </p>
 
-              {emailStatus?.configured ? (
+              {emailStatus?.configured && !appPasswordInput ? (
                 <div className="space-y-3">
-                  <div className="text-xs text-[#2e7d32] bg-[#EBF3EC] p-3 rounded-lg border border-[#A8C7AD] flex items-center justify-between">
+                  <div className="text-xs text-[#2e7d32] bg-[#EBF3EC] p-3 rounded-lg border border-[#A8C7AD] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
                       <strong>Email Transporter Active</strong>
                       <p className="text-[11px] text-[#3A4B3D] mt-0.5">Connected to {emailStatus.user}</p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleSendTestEmail}
-                      disabled={isTestingEmail}
-                      className="px-3 py-1.5 rounded-lg bg-[#5A6B5D] hover:bg-[#4A594D] text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                    >
-                      <Send className="w-3 h-3" />
-                      {isTestingEmail ? "Sending..." : "Send Test Email"}
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setAppPasswordInput(" ")}
+                        className="px-2.5 py-1.5 rounded-lg bg-white border border-[#A8C7AD] text-[#2D2A26] text-xs font-semibold hover:bg-[#F5F2ED] transition cursor-pointer"
+                      >
+                        Update Key
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSendTestEmail}
+                        disabled={isTestingEmail}
+                        className="px-3 py-1.5 rounded-lg bg-[#5A6B5D] hover:bg-[#4A594D] text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                      >
+                        <Send className="w-3 h-3" />
+                        {isTestingEmail ? "Sending..." : "Send Test Email"}
+                      </button>
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -380,7 +389,7 @@ export const AdminSyncModal: React.FC<AdminSyncModalProps> = ({
                   <div className="flex gap-2">
                     <input
                       type="password"
-                      value={appPasswordInput}
+                      value={appPasswordInput.trim()}
                       onChange={(e) => setAppPasswordInput(e.target.value)}
                       placeholder="Paste 16-character Gmail App Password..."
                       className="flex-1 px-3 py-2 rounded-lg border border-[#D5C9B8] bg-white text-xs text-[#2D2A26] focus:outline-none focus:ring-2 focus:ring-[#5A6B5D]"

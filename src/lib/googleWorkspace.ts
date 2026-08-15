@@ -70,6 +70,16 @@ export const googleSignIn = async (): Promise<{
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
     console.error("Google Workspace Sign-in error:", error);
+    if (
+      error?.code === "auth/unauthorized-domain" ||
+      error?.message?.includes("unauthorized-domain") ||
+      error?.message?.includes("unauthorized domain")
+    ) {
+      const hostname = typeof window !== "undefined" ? window.location.hostname : "this domain";
+      throw new Error(
+        `Authorized Domain Notice: The domain '${hostname}' is not listed in your Firebase Console's Authorized Domains list (Firebase Console > Authentication > Settings > Authorized Domains). Use the 'Download CSV' button at the top to export all reservations directly into Google Sheets or Excel.`
+      );
+    }
     throw error;
   } finally {
     isSigningIn = false;

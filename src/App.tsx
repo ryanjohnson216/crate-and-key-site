@@ -19,7 +19,7 @@ import { OrderConfirmationModal } from "./components/OrderConfirmationModal";
 import { TermsAndConditionsPage } from "./components/TermsAndConditionsPage";
 import { AdminSyncModal } from "./components/AdminSyncModal";
 import { ShoppingBag, ArrowRight, X } from "lucide-react";
-import { initGA, trackPageView, trackEvent, getCampaignInfo } from "./lib/analytics";
+import { initGA, trackPageView, trackEvent } from "./lib/analytics";
 
 export default function App() {
   const [theme, setTheme] = useState<BrandTheme>("warm-friendly");
@@ -33,28 +33,36 @@ export default function App() {
     // Initialize Google Analytics on load
     initGA();
 
-    const campaign = getCampaignInfo();
-    if (campaign?.isPostcard) {
-      sessionStorage.setItem("crate_key_campaign", campaign.tag);
+    const params = new URLSearchParams(window.location.search);
+    const utmSource = params.get("utm_source");
+    const utmCampaign = params.get("utm_campaign");
+    const ref = params.get("ref");
+    const promo = params.get("promo");
+
+    if (
+      utmSource === "postcard" ||
+      ref === "postcard" ||
+      promo === "postcard" ||
+      utmCampaign?.includes("postcard") ||
+      utmCampaign?.includes("pending")
+    ) {
+      const tag = "Postcard Campaign (Pending Home Sale)";
+      sessionStorage.setItem("crate_key_campaign", tag);
       setCampaignBanner("📬 Welcome Homeowner! Postcard offer active — FREE local delivery & pickup included on all tote rentals!");
       
       // GA Event for postcard QR scan / campaign visit
       trackEvent("postcard_landing", {
-        event_category: "Postcard Direct Mail",
-        event_label: "Postcard QR Scan / Visit",
         campaign_source: "postcard",
-        campaign_medium: campaign.medium,
-        campaign_name: campaign.campaign,
-        page_location: window.location.href,
+        utm_campaign: utmCampaign || "pending_home_sale",
       });
-    } else if (campaign) {
-      sessionStorage.setItem("crate_key_campaign", campaign.tag);
-      setCampaignBanner(`✨ Welcome! Special offer active for visitors from ${campaign.source}`);
+    } else if (utmSource || ref || promo) {
+      const tag = `Campaign: ${utmSource || ref || promo}${utmCampaign ? ` (${utmCampaign})` : ""}`;
+      sessionStorage.setItem("crate_key_campaign", tag);
+      setCampaignBanner(`✨ Welcome! Special offer active for visitors from ${utmSource || ref || promo}`);
       
       trackEvent("campaign_landing", {
-        source: campaign.source,
-        medium: campaign.medium,
-        campaign: campaign.campaign,
+        source: utmSource || ref || promo,
+        campaign: utmCampaign,
       });
     }
   }, []);
