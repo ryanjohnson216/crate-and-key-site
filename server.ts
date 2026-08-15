@@ -14,10 +14,27 @@ app.use(express.json());
 
 // Helper to construct Nodemailer transporter based on ENV vars
 let customRuntimeAppPassword = "";
+const EMAIL_CONFIG_FILE = path.join(process.cwd(), "email_config.json");
+
+function loadSavedAppPassword(): string {
+  try {
+    if (fs.existsSync(EMAIL_CONFIG_FILE)) {
+      const data = fs.readFileSync(EMAIL_CONFIG_FILE, "utf-8");
+      const parsed = JSON.parse(data);
+      if (parsed?.appPassword) {
+        return String(parsed.appPassword).trim();
+      }
+    }
+  } catch (e) {
+    console.warn("Could not read email_config.json:", e);
+  }
+  return "";
+}
 
 function getEmailTransporter() {
   const user = process.env.GMAIL_USER || process.env.SMTP_USER || "crateandkeyrentals@gmail.com";
-  const rawPass = customRuntimeAppPassword || process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS || "";
+  const diskPass = loadSavedAppPassword();
+  const rawPass = customRuntimeAppPassword || process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS || diskPass || "";
   const pass = rawPass.replace(/\s+/g, "");
 
   if (!pass) {
@@ -147,10 +164,12 @@ async function sendReservationEmails(reservation: any) {
     return { sent: false, reason: "GMAIL_APP_PASSWORD or SMTP_PASS not set in environment" };
   }
 
+  const sender = teamEmail;
+  let teamSent = false;
+  let customerSent = false;
+
+  // 1. Send notification email to team
   try {
-    const sender = teamEmail;
-    
-    // 1. Send notification email to team
     await transporter.sendMail({
       from: `"Crate & Key Rentals" <${sender}>`,
       to: teamEmail,
@@ -158,9 +177,15 @@ async function sendReservationEmails(reservation: any) {
       subject: `[New Reservation Request] ${code} - ${custName} (${deliveryDate})`,
       html: emailHtml,
     });
+    teamSent = true;
+    console.log(`[Crate & Key Email] Team alert email sent to ${teamEmail} for reservation ${code}`);
+  } catch (err: any) {
+    console.error(`[Crate & Key Email Error] Failed to send team alert:`, err.message);
+  }
 
-    // 2. Send customer receipt confirmation copy
-    if (custEmail) {
+  // 2. Send customer receipt confirmation copy
+  if (custEmail) {
+    try {
       const customerEmailHtml = `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #2D2A26; background: #FDFBF7; padding: 24px; border-radius: 12px; border: 1px solid #EBE3D5;">
           <div style="text-align: center; padding-bottom: 16px; border-bottom: 1px solid #EBE3D5; margin-bottom: 20px;">
@@ -213,14 +238,14 @@ async function sendReservationEmails(reservation: any) {
         subject: `Your Crate & Key Reservation Request (${code})`,
         html: customerEmailHtml,
       });
+      customerSent = true;
+      console.log(`[Crate & Key Email] Customer receipt email sent to ${custEmail} for reservation ${code}`);
+    } catch (err: any) {
+      console.error(`[Crate & Key Email Error] Failed to send customer receipt to ${custEmail}:`, err.message);
     }
-
-    console.log(`[Crate & Key Email] Both team and customer confirmation emails sent successfully for reservation ${code}!`);
-    return { sent: true };
-  } catch (err: any) {
-    console.error(`[Crate & Key Email Error] Failed to send email:`, err.message);
-    return { sent: false, error: err.message };
   }
+
+  return { sent: teamSent || customerSent, teamSent, customerSent };
 }
 
 // Known zip codes within 60 miles of Washington, IL (61571) / Peoria region
@@ -501,7 +526,13 @@ app.post("/api/admin/email-config", (req, res) => {
   customRuntimeAppPassword = appPassword.trim();
   process.env.GMAIL_APP_PASSWORD = customRuntimeAppPassword;
 
-  // Attempt to write to .env
+  // Attempt to write to email_config.json and .env
+  try {
+    fs.writeFileSync(EMAIL_CONFIG_FILE, JSON.stringify({ appPassword: customRuntimeAppPassword, updatedAt: new Date().toISOString() }, null, 2), "utf-8");
+  } catch (e) {
+    console.warn("Could not write email_config.json:", e);
+  }
+
   try {
     const envPath = path.join(process.cwd(), ".env");
     let content = "";
@@ -554,7 +585,7 @@ app.post("/api/admin/test-email", async (req, res) => {
   if (result.sent) {
     return res.json({ success: true, message: `Test email sent successfully to ${targetEmail} and team inbox!` });
   } else {
-    return res.status(500).json({ success: false, error: result.error || result.reason || "Failed to send test email." });
+    return res.status(500).json({ success: false, error: (result as any).error || (result as any).reason || "Failed to send test email." });
   }
 });
 
