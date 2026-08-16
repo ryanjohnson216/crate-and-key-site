@@ -34,7 +34,7 @@ function loadSavedAppPassword(): string {
 function getEmailTransporter() {
   const user = process.env.GMAIL_USER || process.env.SMTP_USER || "crateandkeyrentals@gmail.com";
   const diskPass = loadSavedAppPassword();
-  const rawPass = customRuntimeAppPassword || process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS || diskPass || "";
+  const rawPass = customRuntimeAppPassword || diskPass || process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS || "";
   const pass = rawPass.replace(/\s+/g, "");
 
   if (!pass) {
@@ -170,6 +170,8 @@ async function sendReservationEmails(reservation: any) {
   const sender = teamEmail;
   let teamSent = false;
   let customerSent = false;
+  let teamError = "";
+  let customerError = "";
 
   // 1. Send notification email to team
   try {
@@ -183,6 +185,7 @@ async function sendReservationEmails(reservation: any) {
     teamSent = true;
     console.log(`[Crate & Key Email] Team alert email sent to ${teamEmail} for reservation ${code}`);
   } catch (err: any) {
+    teamError = err.message || String(err);
     console.error(`[Crate & Key Email Error] Failed to send team alert:`, err.message);
   }
 
@@ -244,11 +247,17 @@ async function sendReservationEmails(reservation: any) {
       customerSent = true;
       console.log(`[Crate & Key Email] Customer receipt email sent to ${custEmail} for reservation ${code}`);
     } catch (err: any) {
+      customerError = err.message || String(err);
       console.error(`[Crate & Key Email Error] Failed to send customer receipt to ${custEmail}:`, err.message);
     }
   }
 
-  return { sent: teamSent || customerSent, teamSent, customerSent };
+  return {
+    sent: teamSent || customerSent,
+    teamSent,
+    customerSent,
+    error: teamError || customerError || undefined
+  };
 }
 
 // Known zip codes within 60 miles of Washington, IL (61571) / Peoria region
