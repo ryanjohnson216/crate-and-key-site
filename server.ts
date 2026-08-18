@@ -442,6 +442,59 @@ app.post("/api/reserve", async (req, res) => {
   }
 });
 
+// API: Contact Form Submission & Email Dispatch
+app.post("/api/contact", async (req, res) => {
+  try {
+    const { name, email, phone, subject, message } = req.body || {};
+    if (!name || !email || !message) {
+      return res.status(400).json({ success: false, error: "Name, email, and message are required." });
+    }
+
+    console.log(`[Crate & Key Contact] Inquiry from ${name} (${email}): ${subject || "General"}`);
+
+    const transporter = getEmailTransporter();
+    const teamEmail = process.env.GMAIL_USER || process.env.SMTP_USER || "crateandkeyrentals@gmail.com";
+
+    if (transporter) {
+      const emailHtml = `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #2D2A26; background: #FDFBF7; padding: 24px; border-radius: 12px; border: 1px solid #EBE3D5;">
+          <h2 style="color: #5A6B5D; margin-top: 0;">New Website Inquiry</h2>
+          <div style="background: #F5F2ED; padding: 16px; border-radius: 8px; margin: 16px 0;">
+            <p style="margin: 4px 0;"><strong>From:</strong> ${name}</p>
+            <p style="margin: 4px 0;"><strong>Email:</strong> <a href="mailto:${email}">${email}</a></p>
+            <p style="margin: 4px 0;"><strong>Phone:</strong> ${phone || "Not provided"}</p>
+            <p style="margin: 4px 0;"><strong>Topic:</strong> ${subject || "General Question"}</p>
+          </div>
+          <div style="background: #FFFFFF; padding: 16px; border-radius: 8px; border: 1px solid #EBE3D5; margin: 16px 0;">
+            <h4 style="margin-top: 0; font-size: 12px; text-transform: uppercase; color: #7E6E5C; letter-spacing: 0.5px;">Message:</h4>
+            <p style="white-space: pre-wrap; margin: 0; color: #2D2A26; font-size: 14px; line-height: 1.5;">${message}</p>
+          </div>
+          <p style="font-size: 12px; color: #A08E79; margin-top: 24px;">Crate & Key Rentals • Peoria / Washington, IL</p>
+        </div>
+      `;
+
+      try {
+        await transporter.sendMail({
+          from: `"Crate & Key Contact Form" <${teamEmail}>`,
+          to: teamEmail,
+          replyTo: email,
+          subject: `[Website Inquiry] ${subject || "General Question"} - ${name}`,
+          html: emailHtml,
+        });
+      } catch (err: any) {
+        console.error(`[Crate & Key Email Error] Failed to send contact email:`, err.message);
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: "Your message has been sent successfully!",
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error?.message || "Failed to submit message." });
+  }
+});
+
 // Admin auth middleware check
 const ADMIN_PASSKEY = process.env.ADMIN_PASSKEY || "cratekey2026";
 

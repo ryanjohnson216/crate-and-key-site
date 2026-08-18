@@ -21,7 +21,7 @@ export const WhyReusableSection: React.FC<WhyReusableSectionProps> = () => {
         
         {/* Section Header */}
         <h2 className="text-2xl sm:text-3xl font-serif text-[#2D2A26] tracking-tight mb-4 sm:mb-6">
-          Why Reusable Crates?
+          Why Reusable Totes?
         </h2>
 
         {/* 2 Column Layout */}

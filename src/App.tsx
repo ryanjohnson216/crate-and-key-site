@@ -11,7 +11,9 @@ import { HeroSection } from "./components/HeroSection";
 import { WhyReusableSection } from "./components/WhyReusableSection";
 import { HowItWorksSection } from "./components/HowItWorksSection";
 import { ProductCatalogSection } from "./components/ProductCatalogSection";
-import { FaqSection } from "./components/FaqSection";
+import { ContactSection } from "./components/ContactSection";
+import { FaqPage } from "./components/FaqPage";
+import { AboutPage } from "./components/AboutPage";
 import { FooterSection } from "./components/FooterSection";
 import { ToteQuizModal } from "./components/ToteQuizModal";
 import { ReservationCheckoutModal } from "./components/ReservationCheckoutModal";
@@ -67,16 +69,45 @@ export default function App() {
     }
   }, []);
 
-  // View state: 'home' | 'terms'
-  const [currentView, setCurrentView] = useState<"home" | "terms">(() => {
-    return typeof window !== "undefined" && window.location.hash === "#terms" ? "terms" : "home";
-  });
+  // View state: 'home' | 'terms' | 'faq' | 'about'
+  const [currentView, setCurrentView] = useState<"home" | "terms" | "faq" | "about">(
+    () => {
+      if (typeof window !== "undefined") {
+        if (window.location.hash === "#terms") return "terms";
+        if (window.location.hash === "#faq") return "faq";
+        if (window.location.hash === "#about") return "about";
+      }
+      return "home";
+    }
+  );
 
-  const handleNavigate = (view: "home" | "terms") => {
+  const handleNavigate = (view: "home" | "terms" | "faq" | "about") => {
     setCurrentView(view);
-    trackPageView(view === "terms" ? "/#terms" : "/", view === "terms" ? "Terms and Conditions" : "Home - Crate & Key");
+    trackPageView(
+      view === "terms"
+        ? "/#terms"
+        : view === "faq"
+        ? "/#faq"
+        : view === "about"
+        ? "/#about"
+        : "/",
+      view === "terms"
+        ? "Terms and Conditions"
+        : view === "faq"
+        ? "Frequently Asked Questions"
+        : view === "about"
+        ? "About Us - Crate & Key"
+        : "Home - Crate & Key"
+    );
     if (typeof window !== "undefined") {
-      window.location.hash = view === "terms" ? "#terms" : "";
+      window.location.hash =
+        view === "terms"
+          ? "#terms"
+          : view === "faq"
+          ? "#faq"
+          : view === "about"
+          ? "#about"
+          : "";
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
@@ -85,6 +116,10 @@ export default function App() {
     const handleHashChange = () => {
       if (window.location.hash === "#terms") {
         setCurrentView("terms");
+      } else if (window.location.hash === "#faq") {
+        setCurrentView("faq");
+      } else if (window.location.hash === "#about") {
+        setCurrentView("about");
       } else if (window.location.hash === "" || window.location.hash === "#home") {
         setCurrentView("home");
       }
@@ -237,6 +272,45 @@ export default function App() {
               onOpenCheckout={() => setIsCheckoutOpen(true)}
               onOpenQuiz={() => setIsQuizOpen(true)}
               onNavigateToTerms={() => handleNavigate("terms")}
+              onNavigateToFaq={() => handleNavigate("faq")}
+              onNavigateToAbout={() => handleNavigate("about")}
+            />
+          </>
+        ) : currentView === "faq" ? (
+          <>
+            <FaqPage
+              theme={theme}
+              onNavigateHome={() => handleNavigate("home")}
+              onOpenCheckout={() => setIsCheckoutOpen(true)}
+              onOpenQuiz={() => setIsQuizOpen(true)}
+            />
+
+            {/* Footer */}
+            <FooterSection
+              theme={theme}
+              onOpenCheckout={() => setIsCheckoutOpen(true)}
+              onOpenQuiz={() => setIsQuizOpen(true)}
+              onNavigateToTerms={() => handleNavigate("terms")}
+              onNavigateToFaq={() => handleNavigate("faq")}
+              onNavigateToAbout={() => handleNavigate("about")}
+            />
+          </>
+        ) : currentView === "about" ? (
+          <>
+            <AboutPage
+              theme={theme}
+              onNavigateHome={() => handleNavigate("home")}
+              onOpenCheckout={() => setIsCheckoutOpen(true)}
+            />
+
+            {/* Footer */}
+            <FooterSection
+              theme={theme}
+              onOpenCheckout={() => setIsCheckoutOpen(true)}
+              onOpenQuiz={() => setIsQuizOpen(true)}
+              onNavigateToTerms={() => handleNavigate("terms")}
+              onNavigateToFaq={() => handleNavigate("faq")}
+              onNavigateToAbout={() => handleNavigate("about")}
             />
           </>
         ) : (
@@ -249,6 +323,8 @@ export default function App() {
               onOpenCheckout={() => setIsCheckoutOpen(true)}
               onOpenQuiz={() => setIsQuizOpen(true)}
               onNavigateHome={() => handleNavigate("home")}
+              onNavigateToFaq={() => handleNavigate("faq")}
+              onNavigateToAbout={() => handleNavigate("about")}
             />
 
             {/* Main Page Sections in exact required order */}
@@ -278,11 +354,8 @@ export default function App() {
                 onOpenCheckout={() => setIsCheckoutOpen(true)}
               />
 
-              {/* 5. FAQ */}
-              <FaqSection
-                theme={theme}
-                onOpenQuiz={() => setIsQuizOpen(true)}
-              />
+              {/* 5. Contact Section */}
+              <ContactSection theme={theme} />
             </main>
 
             {/* Footer */}
@@ -291,6 +364,8 @@ export default function App() {
               onOpenCheckout={() => setIsCheckoutOpen(true)}
               onOpenQuiz={() => setIsQuizOpen(true)}
               onNavigateToTerms={() => handleNavigate("terms")}
+              onNavigateToFaq={() => handleNavigate("faq")}
+              onNavigateToAbout={() => handleNavigate("about")}
             />
           </>
         )}

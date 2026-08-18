@@ -48,6 +48,7 @@ export const AdminSyncModal: React.FC<AdminSyncModalProps> = ({
   // Server Email Transporter State
   const [emailStatus, setEmailStatus] = useState<{ configured: boolean; user: string } | null>(null);
   const [appPasswordInput, setAppPasswordInput] = useState("");
+  const [testEmailInput, setTestEmailInput] = useState("ryanjohnson216@gmail.com");
   const [isSavingAppPass, setIsSavingAppPass] = useState(false);
   const [emailMsg, setEmailMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [isTestingEmail, setIsTestingEmail] = useState(false);
@@ -203,15 +204,17 @@ export const AdminSyncModal: React.FC<AdminSyncModalProps> = ({
     setIsTestingEmail(true);
     setEmailMsg(null);
 
+    const target = testEmailInput.trim() || "crateandkeyrentals@gmail.com";
+
     try {
       const res = await fetch("/api/admin/test-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: passcode, email: "crateandkeyrentals@gmail.com" }),
+        body: JSON.stringify({ key: passcode, email: target }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        setEmailMsg({ type: "success", text: data.message });
+        setEmailMsg({ type: "success", text: `Test email sent! Check ${target} (and check Spam/Junk/Promotions tab if not in Inbox).` });
       } else {
         setEmailMsg({ type: "error", text: data.error || "Test email sending failed." });
       }
@@ -350,24 +353,34 @@ export const AdminSyncModal: React.FC<AdminSyncModalProps> = ({
 
               {emailStatus?.configured && !appPasswordInput ? (
                 <div className="space-y-3">
-                  <div className="text-xs text-[#2e7d32] bg-[#EBF3EC] p-3 rounded-lg border border-[#A8C7AD] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div>
-                      <strong>Email Transporter Active</strong>
-                      <p className="text-[11px] text-[#3A4B3D] mt-0.5">Connected to {emailStatus.user}</p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                  <div className="text-xs text-[#2e7d32] bg-[#EBF3EC] p-3 rounded-lg border border-[#A8C7AD] space-y-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <strong>Email Transporter Active</strong>
+                        <p className="text-[11px] text-[#3A4B3D] mt-0.5">Sender: {emailStatus.user}</p>
+                      </div>
                       <button
                         type="button"
                         onClick={() => setAppPasswordInput(" ")}
-                        className="px-2.5 py-1.5 rounded-lg bg-white border border-[#A8C7AD] text-[#2D2A26] text-xs font-semibold hover:bg-[#F5F2ED] transition cursor-pointer"
+                        className="px-2.5 py-1 rounded-lg bg-white border border-[#A8C7AD] text-[#2D2A26] text-[11px] font-semibold hover:bg-[#F5F2ED] transition cursor-pointer self-start sm:self-auto"
                       >
                         Update Key
                       </button>
+                    </div>
+
+                    <div className="pt-2 border-t border-[#A8C7AD]/40 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                      <input
+                        type="email"
+                        value={testEmailInput}
+                        onChange={(e) => setTestEmailInput(e.target.value)}
+                        placeholder="Test email recipient..."
+                        className="flex-1 px-2.5 py-1.5 rounded-md border border-[#A8C7AD] bg-white text-xs text-[#2D2A26] focus:outline-none focus:ring-1 focus:ring-[#5A6B5D]"
+                      />
                       <button
                         type="button"
                         onClick={handleSendTestEmail}
                         disabled={isTestingEmail}
-                        className="px-3 py-1.5 rounded-lg bg-[#5A6B5D] hover:bg-[#4A594D] text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        className="px-3 py-1.5 rounded-md bg-[#5A6B5D] hover:bg-[#4A594D] text-white text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50 shrink-0"
                       >
                         <Send className="w-3 h-3" />
                         {isTestingEmail ? "Sending..." : "Send Test Email"}

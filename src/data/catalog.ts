@@ -235,7 +235,8 @@ export const FAQ_ITEMS = [
 ];
 
 export const SERVICE_CITIES = [
-  "Peoria", "East Peoria", "Pekin", "Morton", "Washington",
-  "Dunlap", "Metamora", "Chillicothe", "Canton", "Galesburg",
-  "Bloomington", "Normal", "Lincoln", "Eureka", "Tremont"
+  "Washington", "Peoria", "East Peoria", "Pekin", "Morton",
+  "Peoria Heights", "Dunlap", "Germantown Hills", "Metamora",
+  "Chillicothe", "Edwards", "Princeville", "Bloomington",
+  "Normal", "Eureka", "Tremont"
 ];
