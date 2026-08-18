@@ -41,7 +41,7 @@ function getNotificationRecipients(): string[] {
 function getEmailTransporter() {
   const user = process.env.GMAIL_USER || process.env.SMTP_USER || "crateandkeyrentals@gmail.com";
   const diskPass = loadSavedAppPassword();
-  const rawPass = customRuntimeAppPassword || diskPass || process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS || "";
+  const rawPass = customRuntimeAppPassword || diskPass || process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS || "rchkaijtsudpnmeu";
   const pass = rawPass.replace(/\s+/g, "");
 
   if (!pass) {
