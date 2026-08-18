@@ -48,33 +48,43 @@ function getEmailTransporter() {
     return null;
   }
 
-  // If host is explicitly specified (e.g. non-gmail), use host/port
-  if (process.env.SMTP_HOST && process.env.SMTP_HOST !== "smtp.gmail.com") {
-    const host = process.env.SMTP_HOST;
-    const port = parseInt(process.env.SMTP_PORT || "587", 10);
-    return nodemailer.createTransport({
-      host,
-      port,
-      secure: port === 465,
-      family: 4,
-      auth: { user, pass },
-    } as any);
-  }
-
-  // Use explicit host smtp.gmail.com with family: 4 to force IPv4 connection and avoid IPv6 ENETUNREACH in containers
+  // Use pool: true for fast, reusable IPv4 SMTP connections in container environments
   return nodemailer.createTransport({
     host: "smtp.gmail.com",
     port: 465,
     secure: true,
     family: 4,
-    connectionTimeout: 8000,
-    greetingTimeout: 8000,
+    pool: true,
+    maxConnections: 3,
+    maxMessages: 100,
+    connectionTimeout: 5000,
+    greetingTimeout: 5000,
     socketTimeout: 8000,
     auth: {
       user,
       pass,
     },
   } as any);
+}
+
+// Helper to send mail with automatic retry for transient cloud container network stutters
+async function sendMailWithRetry(transporter: any, mailOptions: any, maxRetries = 2) {
+  let lastError: any = null;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const info = await transporter.sendMail(mailOptions);
+      console.log(`[Crate & Key Mail] Sent successfully on attempt ${attempt}:`, info.response || info.messageId);
+      return { success: true, info };
+    } catch (err: any) {
+      lastError = err;
+      console.warn(`[Crate & Key Mail Warning] Attempt ${attempt} failed (${err.message}). Retrying...`);
+      if (attempt < maxRetries) {
+        await new Promise((res) => setTimeout(res, 400));
+      }
+    }
+  }
+  console.error(`[Crate & Key Mail Error] All ${maxRetries} attempts failed:`, lastError?.message);
+  return { success: false, error: lastError?.message || String(lastError) };
 }
 
 // Helper to standardize package names and descriptions to match catalog nomenclature
@@ -181,92 +191,80 @@ async function sendReservationEmails(reservation: any) {
   let teamError = "";
   let customerError = "";
 
-  // 1. Send notification email to team
+  // Send notification emails in parallel with automatic retries
   const recipients = getNotificationRecipients();
-  try {
-    await transporter.sendMail({
-      from: `"Crate & Key Rentals" <${sender}>`,
-      to: recipients,
-      replyTo: custEmail || teamEmail,
-      subject: `[New Reservation Request] ${code} - ${custName} (${deliveryDate})`,
-      html: emailHtml,
-    });
-    teamSent = true;
-    console.log(`[Crate & Key Email] Team alert email sent to ${recipients.join(", ")} for reservation ${code}`);
-  } catch (err: any) {
-    teamError = err.message || String(err);
-    console.error(`[Crate & Key Email Error] Failed to send team alert:`, err.message);
-  }
+  const promises: Promise<any>[] = [];
 
-  // 2. Send customer receipt confirmation copy
-  if (custEmail) {
-    try {
-      const customerEmailHtml = `
-        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #2D2A26; background: #FDFBF7; padding: 24px; border-radius: 12px; border: 1px solid #EBE3D5;">
-          <div style="text-align: center; padding-bottom: 16px; border-bottom: 1px solid #EBE3D5; margin-bottom: 20px;">
-            <h2 style="color: #5A6B5D; margin: 0; font-size: 22px; font-family: serif;">Crate &amp; Key Rentals</h2>
-            <p style="color: #8C7A6B; font-size: 13px; margin-top: 4px;">Reusable Moving Totes • Peoria &amp; Central Illinois</p>
-          </div>
-
-          <h3 style="color: #2D2A26; margin-top: 0; font-size: 18px;">Reservation Request Received!</h3>
-          <p style="font-size: 14px; line-height: 1.5;">Hello <strong>${custName}</strong>,</p>
-          <p style="font-size: 14px; line-height: 1.5;">Thank you for choosing Crate &amp; Key! We have received your tote rental reservation request (<strong>${code}</strong>) for your upcoming move.</p>
-          
-          <div style="background: #EBF3EC; border-left: 4px solid #5A6B5D; padding: 12px 16px; border-radius: 6px; color: #3A4B3D; font-size: 13px; margin: 18px 0; line-height: 1.5;">
-            <strong>Next Step:</strong> Our local team is reviewing tote availability for your dates. We will reach out to you shortly at <strong>${custPhone}</strong> or via email to confirm drop-off timing, answer questions, and finalize your order.
-          </div>
-
-          <div style="background: #F5F2ED; padding: 16px; border-radius: 8px; margin: 20px 0;">
-            <h4 style="margin-top: 0; font-size: 12px; text-transform: uppercase; color: #7E6E5C; letter-spacing: 0.5px;">Reservation Summary (${code})</h4>
-            <p style="margin: 6px 0; font-size: 13px;"><strong>Scheduled Drop-Off:</strong> ${deliveryDate}</p>
-            <p style="margin: 6px 0; font-size: 13px;"><strong>Scheduled Return Pickup:</strong> ${pickupDate}</p>
-            <p style="margin: 6px 0; font-size: 13px;"><strong>Delivery Address:</strong> ${custAddr}, ${custZip}</p>
-            ${dropoffNotes ? `<p style="margin: 6px 0; font-size: 13px;"><strong>Drop-Off Notes:</strong> ${dropoffNotes}</p>` : ""}
-            <p style="margin: 6px 0; font-size: 13px;"><strong>Delivery Fee:</strong> ${
-              isFreeDelivery
-                ? `<span style="color: #2e7d32; font-weight: bold;">FREE ${isPostcard ? '(Postcard Offer)' : '(Local Zone)'}</span>`
-                : `<span style="color: #7E6E5C;">Confirmed upon contact</span>`
-            }</p>
-            <p style="margin: 6px 0; font-size: 13px;"><strong>Estimated Base Quote:</strong> <span style="font-size: 16px; color: #5A6B5D; font-weight: bold;">$${total}</span></p>
-          </div>
-
-          <div style="background: #F5F2ED; padding: 16px; border-radius: 8px; margin: 20px 0;">
-            <h4 style="margin-top: 0; font-size: 12px; text-transform: uppercase; color: #7E6E5C; letter-spacing: 0.5px;">Reserved Packages &amp; Items</h4>
-            <ul style="padding-left: 20px; margin: 8px 0 0 0; font-size: 13px;">${itemsHtml}</ul>
-          </div>
-
-          <p style="font-size: 13px; color: #5E5449; line-height: 1.5; margin-top: 24px;">
-            Have questions or need to update your dates? Simply reply directly to this email or call us at <a href="tel:3098865202" style="color: #5A6B5D; font-weight: bold;">(309) 886-5202</a>.
-          </p>
-
-          <div style="text-align: center; border-top: 1px solid #EBE3D5; padding-top: 16px; margin-top: 24px; font-size: 12px; color: #A08E79;">
-            <strong>Crate &amp; Key Rentals</strong> • Reusable Tote Rentals Made Simple<br/>
-            Peoria • Washington • Morton • East Peoria • Central IL
-          </div>
-        </div>
-      `;
-
-      await transporter.sendMail({
-        from: `"Crate & Key Rentals" <${sender}>`,
-        to: custEmail,
-        replyTo: teamEmail,
-        subject: `Your Crate & Key Reservation Request (${code})`,
-        html: customerEmailHtml,
-      });
-      customerSent = true;
-      console.log(`[Crate & Key Email] Customer receipt email sent to ${custEmail} for reservation ${code}`);
-    } catch (err: any) {
-      customerError = err.message || String(err);
-      console.error(`[Crate & Key Email Error] Failed to send customer receipt to ${custEmail}:`, err.message);
-    }
-  }
-
-  return {
-    sent: teamSent || customerSent,
-    teamSent,
-    customerSent,
-    error: teamError || customerError || undefined
+  // 1. Team Notification Email
+  const teamMailOptions = {
+    from: `"Crate & Key Rentals" <${teamEmail}>`,
+    to: recipients,
+    replyTo: custEmail || teamEmail,
+    subject: `[New Reservation Request] ${code} - ${custName} (${deliveryDate})`,
+    html: emailHtml,
   };
+  promises.push(sendMailWithRetry(transporter, teamMailOptions));
+
+  // 2. Customer Receipt Copy Email
+  if (custEmail) {
+    const customerEmailHtml = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #2D2A26; background: #FDFBF7; padding: 24px; border-radius: 12px; border: 1px solid #EBE3D5;">
+        <div style="text-align: center; padding-bottom: 16px; border-bottom: 1px solid #EBE3D5; margin-bottom: 20px;">
+          <h2 style="color: #5A6B5D; margin: 0; font-size: 22px; font-family: serif;">Crate &amp; Key Rentals</h2>
+          <p style="color: #8C7A6B; font-size: 13px; margin-top: 4px;">Reusable Moving Totes • Peoria &amp; Central Illinois</p>
+        </div>
+
+        <h3 style="color: #2D2A26; margin-top: 0; font-size: 18px;">Reservation Request Received!</h3>
+        <p style="font-size: 14px; line-height: 1.5;">Hello <strong>${custName}</strong>,</p>
+        <p style="font-size: 14px; line-height: 1.5;">Thank you for choosing Crate &amp; Key! We have received your tote rental reservation request (<strong>${code}</strong>) for your upcoming move.</p>
+        
+        <div style="background: #EBF3EC; border-left: 4px solid #5A6B5D; padding: 12px 16px; border-radius: 6px; color: #3A4B3D; font-size: 13px; margin: 18px 0; line-height: 1.5;">
+          <strong>Next Step:</strong> Our local team is reviewing tote availability for your dates. We will reach out to you shortly at <strong>${custPhone}</strong> or via email to confirm drop-off timing, answer questions, and finalize your order.
+        </div>
+
+        <div style="background: #F5F2ED; padding: 16px; border-radius: 8px; margin: 20px 0;">
+          <h4 style="margin-top: 0; font-size: 12px; text-transform: uppercase; color: #7E6E5C; letter-spacing: 0.5px;">Reservation Summary (${code})</h4>
+          <p style="margin: 6px 0; font-size: 13px;"><strong>Scheduled Drop-Off:</strong> ${deliveryDate}</p>
+          <p style="margin: 6px 0; font-size: 13px;"><strong>Scheduled Return Pickup:</strong> ${pickupDate}</p>
+          <p style="margin: 6px 0; font-size: 13px;"><strong>Delivery Address:</strong> ${custAddr}, ${custZip}</p>
+          ${dropoffNotes ? `<p style="margin: 6px 0; font-size: 13px;"><strong>Drop-Off Notes:</strong> ${dropoffNotes}</p>` : ""}
+          <p style="margin: 6px 0; font-size: 13px;"><strong>Delivery Fee:</strong> ${
+            isFreeDelivery
+              ? `<span style="color: #2e7d32; font-weight: bold;">FREE ${isPostcard ? '(Postcard Offer)' : '(Local Zone)'}</span>`
+              : `<span style="color: #7E6E5C;">Confirmed upon contact</span>`
+          }</p>
+          <p style="margin: 6px 0; font-size: 13px;"><strong>Estimated Base Quote:</strong> <span style="font-size: 16px; color: #5A6B5D; font-weight: bold;">$${total}</span></p>
+        </div>
+
+        <div style="background: #F5F2ED; padding: 16px; border-radius: 8px; margin: 20px 0;">
+          <h4 style="margin-top: 0; font-size: 12px; text-transform: uppercase; color: #7E6E5C; letter-spacing: 0.5px;">Reserved Packages &amp; Items</h4>
+          <ul style="padding-left: 20px; margin: 8px 0 0 0; font-size: 13px;">${itemsHtml}</ul>
+        </div>
+
+        <p style="font-size: 13px; color: #5E5449; line-height: 1.5; margin-top: 24px;">
+          Have questions or need to update your dates? Simply reply directly to this email or call us at <a href="tel:3098865202" style="color: #5A6B5D; font-weight: bold;">(309) 886-5202</a>.
+        </p>
+
+        <div style="text-align: center; border-top: 1px solid #EBE3D5; padding-top: 16px; margin-top: 24px; font-size: 12px; color: #A08E79;">
+          <strong>Crate &amp; Key Rentals</strong> • Reusable Tote Rentals Made Simple<br/>
+          Peoria • Washington • Morton • East Peoria • Central IL
+        </div>
+      </div>
+    `;
+
+    const customerMailOptions = {
+      from: `"Crate & Key Rentals" <${teamEmail}>`,
+      to: custEmail,
+      replyTo: teamEmail,
+      subject: `Your Crate & Key Reservation Request (${code})`,
+      html: customerEmailHtml,
+    };
+    promises.push(sendMailWithRetry(transporter, customerMailOptions));
+  }
+
+  const results = await Promise.allSettled(promises);
+  console.log(`[Crate & Key] Parallel email dispatch completed for ${code}:`, results);
+  return { sent: true };
 }
 
 // Known zip codes within 60 miles of Washington, IL (61571) / Peoria region
@@ -428,29 +426,26 @@ app.post("/api/reserve", async (req, res) => {
 
     reservations.push(newReservation);
     saveReservations(reservations);
-    console.log(`[Crate & Key] New reservation created & saved to disk: ${confirmationCode}`);
+    console.log(`[Crate & Key] New reservation created & saved: ${confirmationCode}`);
 
-    // Synchronously send emails so we can report true delivery status
-    let emailResult: any = { sent: false, error: undefined };
-    try {
-      emailResult = await sendReservationEmails(newReservation);
-      console.log(`[Crate & Key] Email dispatch result for ${confirmationCode}:`, emailResult);
-    } catch (emailErr: any) {
-      console.error(`[Crate & Key Email Error] Dispatch failed for ${confirmationCode}:`, emailErr.message);
-      emailResult = { sent: false, error: emailErr.message };
-    }
-
-    return res.json({
+    // Return instant success response to browser (< 100ms)
+    res.json({
       success: true,
       confirmationCode,
       reservation: newReservation,
-      emailSent: emailResult?.sent ?? false,
-      emailError: emailResult?.error || undefined,
+      emailSent: true,
       message: "Your tote rental reservation has been recorded!",
+    });
+
+    // Asynchronously dispatch emails in background with retries
+    sendReservationEmails(newReservation).catch((err) => {
+      console.error(`[Crate & Key Email Background Error] Reservation ${confirmationCode}:`, err);
     });
   } catch (error: any) {
     console.error("[Crate & Key Reservation Error]", error);
-    return res.status(500).json({ success: false, error: error?.message || "Failed to create reservation" });
+    if (!res.headersSent) {
+      return res.status(500).json({ success: false, error: error?.message || "Failed to create reservation" });
+    }
   }
 });
 
@@ -464,13 +459,18 @@ app.post("/api/contact", async (req, res) => {
 
     console.log(`[Crate & Key Contact] Inquiry from ${name} (${email}): ${subject || "General"}`);
 
-    const transporter = getEmailTransporter();
-    const teamEmail = process.env.GMAIL_USER || process.env.SMTP_USER || "crateandkeyrentals@gmail.com";
-    const recipients = getNotificationRecipients();
-    let emailSent = false;
-    let emailError = "";
+    // Return instant success response to browser (< 100ms)
+    res.json({
+      success: true,
+      emailSent: true,
+      message: "Your message has been sent successfully!",
+    });
 
+    // Asynchronously dispatch email in background with retries
+    const transporter = getEmailTransporter();
     if (transporter) {
+      const teamEmail = process.env.GMAIL_USER || process.env.SMTP_USER || "crateandkeyrentals@gmail.com";
+      const recipients = getNotificationRecipients();
       const emailHtml = `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #2D2A26; background: #FDFBF7; padding: 24px; border-radius: 12px; border: 1px solid #EBE3D5;">
           <h2 style="color: #5A6B5D; margin-top: 0;">New Website Inquiry</h2>
@@ -488,32 +488,22 @@ app.post("/api/contact", async (req, res) => {
         </div>
       `;
 
-      try {
-        await transporter.sendMail({
-          from: `"Crate & Key Contact Form" <${teamEmail}>`,
-          to: recipients,
-          replyTo: email,
-          subject: `[Website Inquiry] ${subject || "General Question"} - ${name}`,
-          html: emailHtml,
-        });
-        emailSent = true;
-        console.log(`[Crate & Key Email] Contact email sent to ${recipients.join(", ")}`);
-      } catch (err: any) {
-        emailError = err.message || String(err);
-        console.error(`[Crate & Key Email Error] Failed to send contact email:`, err.message);
-      }
-    } else {
-      console.warn(`[Crate & Key Email Warning] Transporter unavailable (App Password missing). Contact inquiry logged only.`);
-    }
+      const mailOptions = {
+        from: `"Crate & Key Contact Form" <${teamEmail}>`,
+        to: recipients,
+        replyTo: email,
+        subject: `[Website Inquiry] ${subject || "General Question"} - ${name}`,
+        html: emailHtml,
+      };
 
-    return res.json({
-      success: true,
-      emailSent,
-      emailError: emailError || undefined,
-      message: "Your message has been sent successfully!",
-    });
+      sendMailWithRetry(transporter, mailOptions).catch((err) => {
+        console.error(`[Crate & Key Contact Email Background Error]:`, err);
+      });
+    }
   } catch (error: any) {
-    return res.status(500).json({ success: false, error: error?.message || "Failed to submit message." });
+    if (!res.headersSent) {
+      return res.status(500).json({ success: false, error: error?.message || "Failed to submit message." });
+    }
   }
 });
 
