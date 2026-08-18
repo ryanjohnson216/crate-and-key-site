@@ -31,6 +31,13 @@ function loadSavedAppPassword(): string {
   return "";
 }
 
+function getNotificationRecipients(): string[] {
+  const primary = process.env.GMAIL_USER || process.env.SMTP_USER || "crateandkeyrentals@gmail.com";
+  const secondary = "ryanjohnson216@gmail.com";
+  const set = new Set([primary, secondary]);
+  return Array.from(set).filter(Boolean);
+}
+
 function getEmailTransporter() {
   const user = process.env.GMAIL_USER || process.env.SMTP_USER || "crateandkeyrentals@gmail.com";
   const diskPass = loadSavedAppPassword();
@@ -174,16 +181,17 @@ async function sendReservationEmails(reservation: any) {
   let customerError = "";
 
   // 1. Send notification email to team
+  const recipients = getNotificationRecipients();
   try {
     await transporter.sendMail({
       from: `"Crate & Key Rentals" <${sender}>`,
-      to: teamEmail,
+      to: recipients,
       replyTo: custEmail || teamEmail,
       subject: `[New Reservation Request] ${code} - ${custName} (${deliveryDate})`,
       html: emailHtml,
     });
     teamSent = true;
-    console.log(`[Crate & Key Email] Team alert email sent to ${teamEmail} for reservation ${code}`);
+    console.log(`[Crate & Key Email] Team alert email sent to ${recipients.join(", ")} for reservation ${code}`);
   } catch (err: any) {
     teamError = err.message || String(err);
     console.error(`[Crate & Key Email Error] Failed to send team alert:`, err.message);
@@ -454,6 +462,9 @@ app.post("/api/contact", async (req, res) => {
 
     const transporter = getEmailTransporter();
     const teamEmail = process.env.GMAIL_USER || process.env.SMTP_USER || "crateandkeyrentals@gmail.com";
+    const recipients = getNotificationRecipients();
+    let emailSent = false;
+    let emailError = "";
 
     if (transporter) {
       const emailHtml = `
@@ -476,18 +487,25 @@ app.post("/api/contact", async (req, res) => {
       try {
         await transporter.sendMail({
           from: `"Crate & Key Contact Form" <${teamEmail}>`,
-          to: teamEmail,
+          to: recipients,
           replyTo: email,
           subject: `[Website Inquiry] ${subject || "General Question"} - ${name}`,
           html: emailHtml,
         });
+        emailSent = true;
+        console.log(`[Crate & Key Email] Contact email sent to ${recipients.join(", ")}`);
       } catch (err: any) {
+        emailError = err.message || String(err);
         console.error(`[Crate & Key Email Error] Failed to send contact email:`, err.message);
       }
+    } else {
+      console.warn(`[Crate & Key Email Warning] Transporter unavailable (App Password missing). Contact inquiry logged only.`);
     }
 
     return res.json({
       success: true,
+      emailSent,
+      emailError: emailError || undefined,
       message: "Your message has been sent successfully!",
     });
   } catch (error: any) {
