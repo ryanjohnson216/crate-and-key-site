@@ -31,12 +31,44 @@ function loadSavedAppPassword(): string {
   return "";
 }
 
+const emailLogs: Array<{
+  timestamp: string;
+  type: string;
+  to: string | string[];
+  subject: string;
+  success: boolean;
+  attempt?: number;
+  response?: string;
+  error?: string;
+}> = [];
+
+function logEmailEvent(event: {
+  type: string;
+  to: string | string[];
+  subject: string;
+  success: boolean;
+  attempt?: number;
+  response?: string;
+  error?: string;
+}) {
+  const logEntry = {
+    timestamp: new Date().toISOString(),
+    ...event,
+  };
+  emailLogs.unshift(logEntry);
+  if (emailLogs.length > 50) emailLogs.pop();
+  return logEntry;
+}
+
 function getNotificationRecipients(): string[] {
   const primary = process.env.GMAIL_USER || process.env.SMTP_USER || "crateandkeyrentals@gmail.com";
   const secondary = "ryanjohnson216@gmail.com";
   const set = new Set([primary, secondary]);
   return Array.from(set).filter(Boolean);
 }
+
+let cachedTransporter: any = null;
+let cachedTransporterPass = "";
 
 function getEmailTransporter() {
   const user = process.env.GMAIL_USER || process.env.SMTP_USER || "crateandkeyrentals@gmail.com";
@@ -48,43 +80,65 @@ function getEmailTransporter() {
     return null;
   }
 
-  // Use pool: true for fast, reusable IPv4 SMTP connections in container environments
-  return nodemailer.createTransport({
+  if (cachedTransporter && cachedTransporterPass === pass) {
+    return cachedTransporter;
+  }
+
+  console.log(`[Crate & Key] Initializing reusable Gmail transporter for user: ${user}`);
+  cachedTransporterPass = pass;
+  cachedTransporter = nodemailer.createTransport({
     host: "smtp.gmail.com",
     port: 465,
     secure: true,
     family: 4,
-    pool: true,
-    maxConnections: 3,
-    maxMessages: 100,
-    connectionTimeout: 5000,
-    greetingTimeout: 5000,
-    socketTimeout: 8000,
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 10000,
     auth: {
       user,
       pass,
     },
   } as any);
+
+  return cachedTransporter;
 }
 
 // Helper to send mail with automatic retry for transient cloud container network stutters
-async function sendMailWithRetry(transporter: any, mailOptions: any, maxRetries = 2) {
+async function sendMailWithRetry(transporter: any, mailOptions: any, type = "General Notification", maxRetries = 2) {
   let lastError: any = null;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const info = await transporter.sendMail(mailOptions);
-      console.log(`[Crate & Key Mail] Sent successfully on attempt ${attempt}:`, info.response || info.messageId);
+      const resp = info.response || info.messageId || "Delivered";
+      console.log(`[Crate & Key Mail] Sent (${type}) on attempt ${attempt}:`, resp);
+      logEmailEvent({
+        type,
+        to: mailOptions.to,
+        subject: mailOptions.subject,
+        success: true,
+        attempt,
+        response: resp,
+      });
       return { success: true, info };
     } catch (err: any) {
       lastError = err;
-      console.warn(`[Crate & Key Mail Warning] Attempt ${attempt} failed (${err.message}). Retrying...`);
+      console.warn(`[Crate & Key Mail Warning] Attempt ${attempt} failed for ${type} (${err.message}). Retrying...`);
       if (attempt < maxRetries) {
-        await new Promise((res) => setTimeout(res, 400));
+        await new Promise((res) => setTimeout(res, 500));
       }
     }
   }
-  console.error(`[Crate & Key Mail Error] All ${maxRetries} attempts failed:`, lastError?.message);
-  return { success: false, error: lastError?.message || String(lastError) };
+  const errMsg = lastError?.message || String(lastError);
+  console.error(`[Crate & Key Mail Error] All ${maxRetries} attempts failed for ${type}:`, errMsg);
+  logEmailEvent({
+    type,
+    to: mailOptions.to,
+    subject: mailOptions.subject,
+    success: false,
+    attempt: maxRetries,
+    error: errMsg,
+  });
+  return { success: false, error: errMsg };
 }
 
 // Helper to standardize package names and descriptions to match catalog nomenclature
@@ -203,7 +257,7 @@ async function sendReservationEmails(reservation: any) {
     subject: `[New Reservation Request] ${code} - ${custName} (${deliveryDate})`,
     html: emailHtml,
   };
-  promises.push(sendMailWithRetry(transporter, teamMailOptions));
+  promises.push(sendMailWithRetry(transporter, teamMailOptions, "Reservation Team Alert"));
 
   // 2. Customer Receipt Copy Email
   if (custEmail) {
@@ -259,7 +313,7 @@ async function sendReservationEmails(reservation: any) {
       subject: `Your Crate & Key Reservation Request (${code})`,
       html: customerEmailHtml,
     };
-    promises.push(sendMailWithRetry(transporter, customerMailOptions));
+    promises.push(sendMailWithRetry(transporter, customerMailOptions, "Customer Receipt"));
   }
 
   const results = await Promise.allSettled(promises);
@@ -496,7 +550,7 @@ app.post("/api/contact", async (req, res) => {
         html: emailHtml,
       };
 
-      sendMailWithRetry(transporter, mailOptions).catch((err) => {
+      sendMailWithRetry(transporter, mailOptions, "Contact Inquiry Alert").catch((err) => {
         console.error(`[Crate & Key Contact Email Background Error]:`, err);
       });
     }
@@ -505,6 +559,18 @@ app.post("/api/contact", async (req, res) => {
       return res.status(500).json({ success: false, error: error?.message || "Failed to submit message." });
     }
   }
+});
+
+// Diagnostic endpoint to view recent email log events
+app.get("/api/email-logs", (req, res) => {
+  const pass = req.query.key || req.headers["x-admin-key"];
+  res.json({
+    totalLogs: emailLogs.length,
+    configuredUser: process.env.GMAIL_USER || process.env.SMTP_USER || "crateandkeyrentals@gmail.com",
+    hasTransporter: !!getEmailTransporter(),
+    recipients: getNotificationRecipients(),
+    logs: emailLogs,
+  });
 });
 
 // Admin auth middleware check
