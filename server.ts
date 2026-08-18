@@ -109,7 +109,8 @@ async function sendReservationEmails(reservation: any) {
   const code = reservation.id || reservation.confirmationCode;
   const deliveryDate = reservation.deliveryDate || "TBD";
   const pickupDate = reservation.pickupDate || "TBD";
-  const total = (reservation.totalAmount || reservation.total || 0).toFixed(2);
+  const totalVal = Number(reservation.totalAmount || reservation.total || 0);
+  const total = isNaN(totalVal) ? "0.00" : totalVal.toFixed(2);
   const campaignSource = reservation.campaignSource || reservation.customerInfo?.campaignSource || "Direct / Organic Search";
   const isPostcard = campaignSource.toLowerCase().includes("postcard");
   const isFreeDelivery = reservation.isFreeDelivery || isPostcard;
@@ -429,23 +430,26 @@ app.post("/api/reserve", async (req, res) => {
     saveReservations(reservations);
     console.log(`[Crate & Key] New reservation created & saved to disk: ${confirmationCode}`);
 
-    // Trigger email dispatch asynchronously in background (non-blocking for fast UI response)
-    sendReservationEmails(newReservation)
-      .then((res) => {
-        console.log(`[Crate & Key] Background email dispatch completed for ${confirmationCode}:`, res);
-      })
-      .catch((err) => {
-        console.error(`[Crate & Key Email Error] Background dispatch failed for ${confirmationCode}:`, err);
-      });
+    // Synchronously send emails so we can report true delivery status
+    let emailResult: any = { sent: false, error: undefined };
+    try {
+      emailResult = await sendReservationEmails(newReservation);
+      console.log(`[Crate & Key] Email dispatch result for ${confirmationCode}:`, emailResult);
+    } catch (emailErr: any) {
+      console.error(`[Crate & Key Email Error] Dispatch failed for ${confirmationCode}:`, emailErr.message);
+      emailResult = { sent: false, error: emailErr.message };
+    }
 
     return res.json({
       success: true,
       confirmationCode,
       reservation: newReservation,
-      emailSent: true,
+      emailSent: emailResult?.sent ?? false,
+      emailError: emailResult?.error || undefined,
       message: "Your tote rental reservation has been recorded!",
     });
   } catch (error: any) {
+    console.error("[Crate & Key Reservation Error]", error);
     return res.status(500).json({ success: false, error: error?.message || "Failed to create reservation" });
   }
 });

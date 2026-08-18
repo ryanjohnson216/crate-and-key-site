@@ -49,8 +49,8 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ theme }) => {
       } else {
         setErrorMessage(data.error || "Failed to send message. Please try again.");
       }
-    } catch (err) {
-      setSubmitted(true);
+    } catch (err: any) {
+      setErrorMessage(err.message || "Network error sending message. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
