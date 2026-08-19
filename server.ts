@@ -86,18 +86,26 @@ function getEmailTransporter() {
 
   console.log(`[Crate & Key] Initializing reusable Gmail transporter for user: ${user}`);
   cachedTransporterPass = pass;
+  
+  // Use STARTTLS port 587 with explicit TLS upgrade for maximum serverless container compatibility
   cachedTransporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 465,
-    secure: true,
-    family: 4,
-    connectionTimeout: 8000,
-    greetingTimeout: 8000,
-    socketTimeout: 10000,
+    host: process.env.SMTP_HOST || "smtp.gmail.com",
+    port: Number(process.env.SMTP_PORT) || 587,
+    secure: false, // false for 587 (STARTTLS)
+    requireTLS: true,
+    pool: true,
+    maxConnections: 3,
+    maxMessages: 100,
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 20000,
     auth: {
       user,
       pass,
     },
+    tls: {
+      rejectUnauthorized: false
+    }
   } as any);
 
   return cachedTransporter;
@@ -236,16 +244,10 @@ async function sendReservationEmails(reservation: any) {
   if (!transporter) {
     console.log(`[Crate & Key Email] Reservation recorded for ${custName} (${code}).`);
     console.log(`[Crate & Key Email] To send real emails automatically, add GMAIL_APP_PASSWORD (or SMTP_PASS) to environment variables.`);
-    return { sent: false, reason: "GMAIL_APP_PASSWORD or SMTP_PASS not set in environment" };
+    return { sent: false, error: "GMAIL_APP_PASSWORD or SMTP_PASS not set in environment" };
   }
 
   const sender = teamEmail;
-  let teamSent = false;
-  let customerSent = false;
-  let teamError = "";
-  let customerError = "";
-
-  // Send notification emails in parallel with automatic retries
   const recipients = getNotificationRecipients();
   const promises: Promise<any>[] = [];
 
@@ -318,7 +320,20 @@ async function sendReservationEmails(reservation: any) {
 
   const results = await Promise.allSettled(promises);
   console.log(`[Crate & Key] Parallel email dispatch completed for ${code}:`, results);
-  return { sent: true };
+
+  const allSuccessful = results.every(
+    (r) => r.status === "fulfilled" && r.value?.success === true
+  );
+
+  const errors = results
+    .filter((r) => r.status === "rejected" || (r.status === "fulfilled" && !r.value?.success))
+    .map((r) => (r.status === "fulfilled" ? r.value?.error : String((r as any).reason)))
+    .filter(Boolean);
+
+  return {
+    sent: allSuccessful,
+    error: errors.length > 0 ? errors.join("; ") : undefined,
+  };
 }
 
 // Known zip codes within 60 miles of Washington, IL (61571) / Peoria region
@@ -482,18 +497,22 @@ app.post("/api/reserve", async (req, res) => {
     saveReservations(reservations);
     console.log(`[Crate & Key] New reservation created & saved: ${confirmationCode}`);
 
-    // Return instant success response to browser (< 100ms)
+    // Synchronously dispatch emails before returning HTTP response so serverless container CPU remains active
+    let emailResult = { sent: false, error: "" };
+    try {
+      emailResult = await sendReservationEmails(newReservation);
+    } catch (mailErr: any) {
+      console.error(`[Crate & Key Email Error] Reservation ${confirmationCode}:`, mailErr);
+      emailResult = { sent: false, error: mailErr?.message || String(mailErr) };
+    }
+
     res.json({
       success: true,
       confirmationCode,
       reservation: newReservation,
-      emailSent: true,
+      emailSent: emailResult.sent,
+      emailError: emailResult.error || undefined,
       message: "Your tote rental reservation has been recorded!",
-    });
-
-    // Asynchronously dispatch emails in background with retries
-    sendReservationEmails(newReservation).catch((err) => {
-      console.error(`[Crate & Key Email Background Error] Reservation ${confirmationCode}:`, err);
     });
   } catch (error: any) {
     console.error("[Crate & Key Reservation Error]", error);
@@ -513,15 +532,10 @@ app.post("/api/contact", async (req, res) => {
 
     console.log(`[Crate & Key Contact] Inquiry from ${name} (${email}): ${subject || "General"}`);
 
-    // Return instant success response to browser (< 100ms)
-    res.json({
-      success: true,
-      emailSent: true,
-      message: "Your message has been sent successfully!",
-    });
-
-    // Asynchronously dispatch email in background with retries
     const transporter = getEmailTransporter();
+    let emailSent = false;
+    let emailError = "";
+
     if (transporter) {
       const teamEmail = process.env.GMAIL_USER || process.env.SMTP_USER || "crateandkeyrentals@gmail.com";
       const recipients = getNotificationRecipients();
@@ -550,10 +564,24 @@ app.post("/api/contact", async (req, res) => {
         html: emailHtml,
       };
 
-      sendMailWithRetry(transporter, mailOptions, "Contact Inquiry Alert").catch((err) => {
-        console.error(`[Crate & Key Contact Email Background Error]:`, err);
-      });
+      try {
+        const mailRes = await sendMailWithRetry(transporter, mailOptions, "Contact Inquiry Alert");
+        emailSent = mailRes.success;
+        if (!mailRes.success) emailError = mailRes.error || "Mail dispatch failed";
+      } catch (err: any) {
+        console.error(`[Crate & Key Contact Email Error]:`, err);
+        emailError = err?.message || String(err);
+      }
+    } else {
+      emailError = "Email transporter not initialized";
     }
+
+    res.json({
+      success: true,
+      emailSent,
+      emailError: emailError || undefined,
+      message: "Your message has been sent successfully!",
+    });
   } catch (error: any) {
     if (!res.headersSent) {
       return res.status(500).json({ success: false, error: error?.message || "Failed to submit message." });
